@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
+const { cacheMiddleware, clearCacheMiddleware } = require('../middleware/cacheMiddleware');
 
 /**
  * @swagger
@@ -60,7 +61,7 @@ const dashboardController = require('../controllers/dashboardController');
  *       500:
  *         description: Server error
  */
-router.get('/:id', dashboardController.getDashboard);
+router.get('/:id', cacheMiddleware(900), dashboardController.getDashboard);
 
 /**
  * @swagger
@@ -99,7 +100,7 @@ router.get('/:id', dashboardController.getDashboard);
  *       500:
  *         description: Server error
  */
-router.get('/goals/:userId', dashboardController.getGoals);
+router.get('/goals/:userId', cacheMiddleware(1800), dashboardController.getGoals);
 
 /**
  * @swagger
@@ -141,7 +142,7 @@ router.get('/goals/:userId', dashboardController.getGoals);
  *       500:
  *         description: Server error
  */
-router.put('/goals/:userId', dashboardController.updateGoals);
+router.put('/goals/:userId', clearCacheMiddleware('cache:*:*/api/dashboard/goals*'), dashboardController.updateGoals);
 
 /**
  * @swagger
@@ -173,7 +174,7 @@ router.put('/goals/:userId', dashboardController.updateGoals);
  *       500:
  *         description: Server error
  */
-router.get('/sessions/upcoming', dashboardController.getUpcomingSessions);
+router.get('/sessions/upcoming', cacheMiddleware(600), dashboardController.getUpcomingSessions);
 
 module.exports = router;
 

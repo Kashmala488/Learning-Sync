@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const quizController = require('../controllers/quizController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
+const { cacheMiddleware, clearCacheMiddleware } = require('../middleware/cacheMiddleware');
 const Group = require('../models/Group');
 
 /**
@@ -51,7 +52,7 @@ const Group = require('../models/Group');
 // Authentication applied to all routes
 router.use(authMiddleware);
 
-// Debug route to check user role
+// Debug routes - no caching needed
 router.get('/debug/user-role', (req, res) => {
   console.log('User debug request from:', req.user.email, 'Role:', req.user.role);
   res.status(200).json({
@@ -63,7 +64,6 @@ router.get('/debug/user-role', (req, res) => {
   });
 });
 
-// Debug route to check group membership
 router.get('/debug/group-membership/:groupId', async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -91,7 +91,7 @@ router.get('/debug/group-membership/:groupId', async (req, res) => {
   }
 });
 
-// Special unrestricted route for quiz generation (bypass role check)
+// Special unrestricted route for quiz generation (bypass role check) - no caching as it's a POST
 router.post('/generate-no-restrict/:groupId', async (req, res) => {
   try {
     const userId = req.user._id;
@@ -159,7 +159,9 @@ router.post('/generate-no-restrict/:groupId', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.post('/student/create', restrictTo('student'), quizController.createStudentQuiz);
+router.post('/student/create', restrictTo('student'), 
+  clearCacheMiddleware('cache:*:*/api/quizzes*'), 
+  quizController.createStudentQuiz);
 
 /**
  * @swagger
@@ -300,7 +302,9 @@ router.post('/generate-from-resource', restrictTo('student'), quizController.gen
  *       500:
  *         description: Server error
  */
-router.get('/group/:groupId/quizzes', restrictTo('student'), quizController.getGroupQuizzes);
+router.get('/group/:groupId/quizzes', restrictTo('student'), 
+  cacheMiddleware(1800), 
+  quizController.getGroupQuizzes);
 
 /**
  * @swagger
@@ -318,7 +322,9 @@ router.get('/group/:groupId/quizzes', restrictTo('student'), quizController.getG
  *       500:
  *         description: Server error
  */
-router.get('/student/results', restrictTo('student'), quizController.getStudentQuizResults);
+router.get('/student/results', restrictTo('student'), 
+  cacheMiddleware(1800), 
+  quizController.getStudentQuizResults);
 
 /**
  * @swagger
@@ -343,7 +349,9 @@ router.get('/student/results', restrictTo('student'), quizController.getStudentQ
  *       500:
  *         description: Server error
  */
-router.get('/practice/:groupId/questions', restrictTo('student'), quizController.getPracticeQuestions);
+router.get('/practice/:groupId/questions', restrictTo('student'), 
+  cacheMiddleware(1800), 
+  quizController.getPracticeQuestions);
 
 /**
  * @swagger
@@ -386,7 +394,9 @@ router.get('/practice/:groupId/questions', restrictTo('student'), quizController
  *       500:
  *         description: Server error
  */
-router.post('/:quizId/submit', restrictTo('student'), quizController.submitQuiz);
+router.post('/:quizId/submit', restrictTo('student'), 
+  clearCacheMiddleware('cache:*:*/api/quizzes/student/results*'), 
+  quizController.submitQuiz);
 
 /**
  * @swagger
@@ -411,7 +421,9 @@ router.post('/:quizId/submit', restrictTo('student'), quizController.submitQuiz)
  *       500:
  *         description: Server error
  */
-router.get('/:quizId/feedback', restrictTo('student'), quizController.getFeedback);
+router.get('/:quizId/feedback', restrictTo('student'), 
+  cacheMiddleware(3600), 
+  quizController.getFeedback);
 
 /**
  * @swagger
@@ -511,7 +523,9 @@ router.post('/:quizId/hint', restrictTo('student'), quizController.requestHint);
  *       500:
  *         description: Server error
  */
-router.get('/:quizId/progress', restrictTo('student'), quizController.getProgressIndicator);
+router.get('/:quizId/progress', restrictTo('student'), 
+  cacheMiddleware(300), 
+  quizController.getProgressIndicator);
 
 /**
  * @swagger
@@ -582,7 +596,9 @@ router.post('/:quizId/time-settings', restrictTo('student'), quizController.conf
  *       500:
  *         description: Server error
  */
-router.post('/create', restrictTo('teacher', 'admin'), quizController.createQuiz);
+router.post('/create', restrictTo('teacher', 'admin'), 
+  clearCacheMiddleware('cache:*:*/api/quizzes*'), 
+  quizController.createQuiz);
 
 /**
  * @swagger
@@ -613,6 +629,6 @@ router.post('/create', restrictTo('teacher', 'admin'), quizController.createQuiz
  *       500:
  *         description: Server error
  */
-router.get('/:quizId', quizController.getQuiz);
+router.get('/:quizId', cacheMiddleware(1800), quizController.getQuiz);
 
 module.exports = router;

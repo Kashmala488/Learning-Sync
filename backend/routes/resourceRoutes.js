@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const resourceController = require('../controllers/resourceController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
+const { cacheMiddleware, clearCacheMiddleware } = require('../middleware/cacheMiddleware');
 
 /**
  * @swagger
@@ -63,7 +64,7 @@ router.use(authMiddleware);
  *       500:
  *         description: Server error
  */
-router.get('/my-resources', resourceController.getUserResources);
+router.get('/my-resources', cacheMiddleware(1800), resourceController.getUserResources);
 
 /**
  * @swagger
@@ -87,7 +88,7 @@ router.get('/my-resources', resourceController.getUserResources);
  *       500:
  *         description: Server error
  */
-router.get('/', resourceController.getAllResources);
+router.get('/', cacheMiddleware(1800), resourceController.getAllResources);
 
 /**
  * @swagger
@@ -118,7 +119,7 @@ router.get('/', resourceController.getAllResources);
  *       500:
  *         description: Server error
  */
-router.get('/:resourceId', resourceController.getResource);
+router.get('/:resourceId', cacheMiddleware(3600), resourceController.getResource);
 
 /**
  * @swagger
@@ -150,7 +151,7 @@ router.get('/:resourceId', resourceController.getResource);
  *       500:
  *         description: Server error
  */
-router.post('/share', resourceController.shareResource);
+router.post('/share', clearCacheMiddleware('cache:*:*/api/resources*'), resourceController.shareResource);
 
 /**
  * @swagger
@@ -228,7 +229,7 @@ router.post('/:resourceId/share', resourceController.shareResourceWithGroups);
  *       500:
  *         description: Server error
  */
-router.put('/:resourceId', resourceController.updateResource);
+router.put('/:resourceId', clearCacheMiddleware('cache:*:*/api/resources*'), resourceController.updateResource);
 
 /**
  * @swagger
@@ -255,7 +256,7 @@ router.put('/:resourceId', resourceController.updateResource);
  *       500:
  *         description: Server error
  */
-router.delete('/:resourceId', resourceController.deleteResource);
+router.delete('/:resourceId', clearCacheMiddleware('cache:*:*/api/resources*'), resourceController.deleteResource);
 
 /**
  * @swagger

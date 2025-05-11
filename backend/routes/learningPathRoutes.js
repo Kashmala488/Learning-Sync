@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const learningPathController = require('../controllers/learningPathController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
+const { cacheMiddleware, clearCacheMiddleware } = require('../middleware/cacheMiddleware');
 
 /**
  * @swagger
@@ -90,7 +91,9 @@ router.use(authMiddleware);
  *       500:
  *         description: Server error
  */
-router.post('/', restrictTo('teacher', 'admin'), learningPathController.createLearningPath);
+router.post('/', restrictTo('teacher', 'admin'), 
+  clearCacheMiddleware('cache:*:*/api/learning-paths*'), 
+  learningPathController.createLearningPath);
 
 /**
  * @swagger
@@ -114,7 +117,9 @@ router.post('/', restrictTo('teacher', 'admin'), learningPathController.createLe
  *       500:
  *         description: Server error
  */
-router.get('/', restrictTo('teacher', 'admin'), learningPathController.getAllLearningPaths);
+router.get('/', restrictTo('teacher', 'admin'), 
+  cacheMiddleware(1800), 
+  learningPathController.getAllLearningPaths);
 
 /**
  * @swagger
@@ -145,7 +150,9 @@ router.get('/', restrictTo('teacher', 'admin'), learningPathController.getAllLea
  *       500:
  *         description: Server error
  */
-router.get('/:pathId', restrictTo('teacher', 'admin', 'student'), learningPathController.getLearningPath);
+router.get('/:pathId', restrictTo('teacher', 'admin', 'student'), 
+  cacheMiddleware(1800), 
+  learningPathController.getLearningPath);
 
 /**
  * @swagger
@@ -189,7 +196,9 @@ router.get('/:pathId', restrictTo('teacher', 'admin', 'student'), learningPathCo
  *       500:
  *         description: Server error
  */
-router.put('/:pathId', restrictTo('teacher', 'admin'), learningPathController.updateLearningPath);
+router.put('/:pathId', restrictTo('teacher', 'admin'), 
+  clearCacheMiddleware('cache:*:*/api/learning-paths*'), 
+  learningPathController.updateLearningPath);
 
 /**
  * @swagger
@@ -216,7 +225,9 @@ router.put('/:pathId', restrictTo('teacher', 'admin'), learningPathController.up
  *       500:
  *         description: Server error
  */
-router.delete('/:pathId', restrictTo('teacher', 'admin'), learningPathController.deleteLearningPath);
+router.delete('/:pathId', restrictTo('teacher', 'admin'), 
+  clearCacheMiddleware('cache:*:*/api/learning-paths*'), 
+  learningPathController.deleteLearningPath);
 
 /**
  * @swagger
@@ -261,5 +272,8 @@ router.delete('/:pathId', restrictTo('teacher', 'admin'), learningPathController
  *       500:
  *         description: Server error
  */
-router.put('/:pathId/resources/:resourceId', restrictTo('student'), learningPathController.updateResourceStatus);
+router.put('/:pathId/resources/:resourceId', restrictTo('student'), 
+  clearCacheMiddleware('cache:*:*/api/learning-paths/:pathId*'), 
+  learningPathController.updateResourceStatus);
+
 module.exports = router;

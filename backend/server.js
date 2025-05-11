@@ -4,6 +4,8 @@ const cors = require('cors');
 const path = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
+// Initialize Redis
+const { redisClient } = require('./config/redis');
 const app = express();
 require('dotenv').config({ path: path.resolve(__dirname, 'config.env') });
 
