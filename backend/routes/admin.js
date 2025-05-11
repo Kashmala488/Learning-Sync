@@ -14,5 +14,6 @@ router.put('/settings', authMiddleware, restrictTo('admin'), adminController.upd
 router.get('/security-alerts', authMiddleware, restrictTo('admin'), adminController.getSecurityAlerts);
 router.put('/security-alerts/:alertId/view', authMiddleware, restrictTo('admin'), adminController.markAlertAsViewed);
 router.get('/analytics', authMiddleware, restrictTo('admin'), adminController.getDetailedAnalytics);
+router.get('/dashboard', authMiddleware, restrictTo('admin'), adminController.generateReports);
 
 module.exports = router;

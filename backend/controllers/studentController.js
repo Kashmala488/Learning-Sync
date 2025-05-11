@@ -12,161 +12,154 @@ const asyncHandler = require('express-async-handler');
 exports.getDashboardData = async (req, res) => {
   try {
     const studentId = req.user._id;
+    if (!studentId) {
+      console.error('Student ID missing from request:', req.user);
+      return res.status(400).json({ error: 'Student ID is required' });
+    }
+
+    console.log('Fetching dashboard data for student:', studentId);
     
-    // Get all data in parallel for better performance
-    const [allLearningPaths, analytics, resources, studentMood] = await Promise.all([
-      // Get learning paths
-      LearningPath.find({ studentId })
-        .populate('teacherId', 'name')
-        .populate('resources.resourceId')
-        .populate('quizzes.quizId'),
-      
-      // Get analytics data
-      (async () => {
-        // Get quiz results
-        const quizResults = await QuizResult.find({ userId: studentId })
-          .populate('quizId', 'title subject difficulty');
+    try {
+      // Get all data in parallel for better performance
+      const [allLearningPaths, analytics, resources, studentMood] = await Promise.all([
+        // Get learning paths
+        LearningPath.find({ studentId })
+          .populate('teacherId', 'name')
+          .populate('resources.resourceId')
+          .populate('quizzes.quizId')
+          .catch(err => {
+            console.error('Error fetching learning paths:', err);
+            return [];
+          }),
         
-        // Get all learning paths for analytics
-        const allPaths = await LearningPath.find({ studentId });
-        
-        // Calculate analytics
-        const quizAnalytics = {
-          totalQuizzes: quizResults.length,
-          averageScore: quizResults.reduce((acc, result) => acc + result.score, 0) / 
-                        (quizResults.length || 1),
-          bySubject: {},
-          byDifficulty: {
-            easy: { count: 0, avgScore: 0 },
-            medium: { count: 0, avgScore: 0 },
-            hard: { count: 0, avgScore: 0 }
-          }
-        };
-        
-        // Group by subject
-        quizResults.forEach(result => {
-          if (result.quizId) {
-            const subject = result.quizId.subject;
-            const difficulty = result.quizId.difficulty;
+        // Get analytics data
+        (async () => {
+          try {
+            // Get quiz results
+            const quizResults = await QuizResult.find({ userId: studentId })
+              .populate('quizId', 'title subject difficulty')
+              .catch(err => {
+                console.error('Error fetching quiz results:', err);
+                return [];
+              });
             
-            // By subject
-            if (!quizAnalytics.bySubject[subject]) {
-              quizAnalytics.bySubject[subject] = {
-                count: 0,
-                avgScore: 0,
-                totalScore: 0
-              };
-            }
-            quizAnalytics.bySubject[subject].count++;
-            quizAnalytics.bySubject[subject].totalScore += result.score;
-            quizAnalytics.bySubject[subject].avgScore = 
-              quizAnalytics.bySubject[subject].totalScore / quizAnalytics.bySubject[subject].count;
+            // Get all learning paths for analytics
+            const allPaths = await LearningPath.find({ studentId })
+              .catch(err => {
+                console.error('Error fetching learning paths for analytics:', err);
+                return [];
+              });
             
-            // By difficulty
-            if (difficulty) {
-              quizAnalytics.byDifficulty[difficulty].count++;
-              quizAnalytics.byDifficulty[difficulty].avgScore = 
-                (quizAnalytics.byDifficulty[difficulty].avgScore * 
-                 (quizAnalytics.byDifficulty[difficulty].count - 1) + 
-                 result.score) / quizAnalytics.byDifficulty[difficulty].count;
-            }
+            // Calculate analytics with default values if data is missing
+            const quizAnalytics = {
+              totalQuizzes: quizResults.length,
+              averageScore: quizResults.reduce((acc, result) => acc + (result.score || 0), 0) / 
+                          (quizResults.length || 1),
+              bySubject: {},
+              byDifficulty: {
+                easy: { count: 0, avgScore: 0 },
+                medium: { count: 0, avgScore: 0 },
+                hard: { count: 0, avgScore: 0 }
+              }
+            };
+            
+            // Group by subject (with error handling)
+            quizResults.forEach(result => {
+              if (result.quizId) {
+                const subject = result.quizId.subject;
+                const difficulty = result.quizId.difficulty;
+                
+                if (subject) {
+                  // By subject
+                  if (!quizAnalytics.bySubject[subject]) {
+                    quizAnalytics.bySubject[subject] = {
+                      count: 0,
+                      avgScore: 0,
+                      totalScore: 0
+                    };
+                  }
+                  quizAnalytics.bySubject[subject].count++;
+                  quizAnalytics.bySubject[subject].totalScore += (result.score || 0);
+                  quizAnalytics.bySubject[subject].avgScore = 
+                    quizAnalytics.bySubject[subject].totalScore / quizAnalytics.bySubject[subject].count;
+                }
+                
+                // By difficulty
+                if (difficulty && quizAnalytics.byDifficulty[difficulty]) {
+                  quizAnalytics.byDifficulty[difficulty].count++;
+                  quizAnalytics.byDifficulty[difficulty].avgScore = 
+                    (quizAnalytics.byDifficulty[difficulty].avgScore * 
+                     (quizAnalytics.byDifficulty[difficulty].count - 1) + 
+                     (result.score || 0)) / quizAnalytics.byDifficulty[difficulty].count;
+                }
+              }
+            });
+            
+            // Learning path progress
+            const learningPathAnalytics = {
+              totalPaths: allPaths.length,
+              activePaths: allPaths.filter(path => path.status === 'active').length,
+              completedPaths: allPaths.filter(path => path.status === 'completed').length,
+              averageProgress: allPaths.reduce((acc, path) => acc + (path.progress || 0), 0) /
+                             (allPaths.length || 1)
+            };
+            
+            return {
+              quizAnalytics,
+              learningPathAnalytics
+            };
+          } catch (err) {
+            console.error('Error in analytics calculation:', err);
+            return {
+              quizAnalytics: { totalQuizzes: 0, averageScore: 0, bySubject: {}, byDifficulty: {} },
+              learningPathAnalytics: { totalPaths: 0, activePaths: 0, completedPaths: 0, averageProgress: 0 }
+            };
           }
-        });
+        })(),
         
-        // Learning path progress
-        const learningPathAnalytics = {
-          totalPaths: allPaths.length,
-          activePaths: allPaths.filter(path => path.status === 'active').length,
-          completedPaths: allPaths.filter(path => path.status === 'completed').length,
-          averageProgress: allPaths.reduce((acc, path) => acc + path.progress, 0) /
-                           (allPaths.length || 1)
-        };
+        // Get recommended resources (limited to 4)
+        Resource.find()
+          .populate('sharedBy', 'name')
+          .sort({ createdAt: -1 })
+          .limit(4)
+          .catch(err => {
+            console.error('Error fetching recommended resources:', err);
+            return [];
+          }),
         
-        return {
-          quizAnalytics,
-          learningPathAnalytics
-        };
-      })(),
-      
-      // Get recommended resources (limited to 4)
-      (async () => {
-        // Get quiz results to identify weak areas
-        const quizResults = await QuizResult.find({ userId: studentId })
-          .populate('quizId', 'subject');
-        
-        // Calculate weak subjects
-        const subjectScores = {};
-        quizResults.forEach(result => {
-          if (result.quizId && result.quizId.subject) {
-            const subject = result.quizId.subject;
-            if (!subjectScores[subject]) {
-              subjectScores[subject] = {
-                totalScore: 0,
-                count: 0
-              };
-            }
-            subjectScores[subject].totalScore += result.score;
-            subjectScores[subject].count++;
-          }
-        });
-        
-        // Sort subjects by average score (ascending)
-        const weakSubjects = Object.keys(subjectScores)
-          .map(subject => ({
-            subject,
-            avgScore: subjectScores[subject].totalScore / subjectScores[subject].count
-          }))
-          .sort((a, b) => a.avgScore - b.avgScore)
-          .slice(0, 3) // Get top 3 weak subjects
-          .map(item => item.subject);
-        
-        // Get resources related to weak subjects
-        const resources = await Resource.find()
-          .populate('sharedBy', 'name');
-        
-        // Filter and rank resources
-        return resources
-          .filter(resource => {
-            const title = resource.title.toLowerCase();
-            return weakSubjects.some(subject => title.includes(subject.toLowerCase()));
+        // Get student mood
+        StudentMood.findOne({ studentId })
+          .sort({ createdAt: -1 })
+          .limit(1)
+          .catch(err => {
+            console.error('Error fetching student mood:', err);
+            return null;
           })
-          .slice(0, 4); // Limit to top 4
-      })(),
+      ]);
       
-      // Get student mood
-      StudentMood.findOne({ studentId }).sort({ createdAt: -1 }).limit(1)
-    ]);
-    
-    // Get recent resources for the resources section
-    const recentResources = await Resource.find()
-      .populate('sharedBy', 'name')
-      .sort({ createdAt: -1 })
-      .limit(3);
-    
-    // Filter learning paths with resources and limit to 3
-    const learningPaths = allLearningPaths
-      .filter(path => path.resources && path.resources.length > 0)
-      .map(path => {
-        // Update status based on progress
-        if (path.progress === 100) {
-          path.status = 'completed';
-        } else if (path.status === 'completed' && path.progress < 100) {
-          path.status = 'active';
-        }
-        return path;
-      })
-      .slice(0, 3); // Limit to 3 paths
-    
-    // Respond with combined dashboard data
-    res.status(200).json({
-      learningPaths,
-      analytics,
-      recommendations: resources,
-      mood: studentMood,
-    });
+      // Filter learning paths with resources and limit to 3
+      const learningPaths = (allLearningPaths || [])
+        .filter(path => path && path.resources && path.resources.length > 0)
+        .map(path => ({
+          ...path.toObject(),
+          status: path.progress === 100 ? 'completed' : 'active'
+        }))
+        .slice(0, 3);
+      
+      // Respond with combined dashboard data
+      res.status(200).json({
+        learningPaths,
+        analytics,
+        recommendations: resources || [],
+        mood: studentMood,
+      });
+    } catch (err) {
+      console.error('Error in Promise.all:', err);
+      res.status(500).json({ error: 'Error fetching dashboard data' });
+    }
   } catch (err) {
-    console.error('Error fetching dashboard data:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in getDashboardData:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 };
 

@@ -5,6 +5,16 @@ const path = require('path');
 const app = express();
 require('dotenv').config({ path: path.resolve(__dirname, 'config.env') });
 
+// Initialize MongoDB connection
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('Connected to MongoDB');
+  })
+  .catch((err) => {
+    console.error('MongoDB connection error:', err.message);
+    process.exit(1);
+  });
+
 // Basic CORS setup - more permissive for development
 app.use(cors());
 
@@ -23,7 +33,13 @@ app.use('/uploads', (req, res, next) => {
 // Add headers for CORS issues
 app.use((req, res, next) => {
   // Allow requests from frontend
-  res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+  const allowedOrigins = ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4000'];
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -42,7 +58,6 @@ app.use((req, res, next) => {
 });
 
 // Import route files
-app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/quizzes', require('./routes/quizRoutes'));
 app.use('/api/resources', require('./routes/resourceRoutes'));
@@ -59,15 +74,8 @@ app.use((req, res, next) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-const PORT = process.env.PORT || 3000;
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
-  });
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 

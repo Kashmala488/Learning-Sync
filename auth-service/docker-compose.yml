@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  auth-service:
+    build: .
+    ports:
+      - "4001:4001"
+    environment:
+      - MONGODB_URI=mongodb+srv://f223658:admin@cluster0.d4z7h.mongodb.net/projdb?retryWrites=true&w=majority&appName=Cluster0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=3f8b9c2e5d4a7f1e6c0a9b8d2e4f7a1c
+      - REFRESH_TOKEN_SECRET=9a7b3c8f2e1d6a4b9c0e7f8a1d2b3c4e
+      - JWT_EXPIRATION=3600000
+      - REFRESH_TOKEN_EXPIRATION=604800000
+      - GOOGLE_CLIENT_ID=441572137222-ecsu4p53mv9s0t97th9rqugptj0lahlv.apps.googleusercontent.com
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+      - SPRING_OUTPUT_ANSI_ENABLED=ALWAYS
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK=INFO
+      - SPRING_SECURITY_JWT_SECRET=3f8b9c2e5d4a7f1e6c0a9b8d2e4f7a1c
+      - SPRING_SECURITY_JWT_EXPIRATION=3600000
+      - SPRING_SECURITY_JWT_REFRESH-TOKEN_SECRET=9a7b3c8f2e1d6a4b9c0e7f8a1d2b3c4e
+      - SPRING_SECURITY_JWT_REFRESH-TOKEN_EXPIRATION=604800000
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4001/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  redis_data:

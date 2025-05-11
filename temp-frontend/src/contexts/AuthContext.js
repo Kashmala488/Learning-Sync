@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import config from '../utils/config';
 
 const AuthContext = createContext();
 
-const API_URL = 'http://localhost:4000';
+const API_URL = config.authApiUrl;
+const USER_API_URL = config.apiUrl;
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -17,6 +19,35 @@ export const AuthProvider = ({ children }) => {
   const [refreshAttempts, setRefreshAttempts] = useState(0);
   const MAX_REFRESH_ATTEMPTS = 3;
   const navigate = useNavigate();
+
+  const clearAuthState = useCallback(() => {
+    setToken(null);
+    setRefreshToken(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    delete axios.defaults.headers.common['Authorization'];
+    setCurrentUser(null);
+    setUserRole(null);
+    setIsAuthenticated(false);
+    setJustLoggedIn(false);
+    setRefreshAttempts(0);
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      if (isAuthenticated && token) {
+        await axios.post(`${API_URL}/logout`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      clearAuthState();
+      navigate('/login');
+    }
+  }, [isAuthenticated, token, clearAuthState, navigate]);
 
   const refreshTokenFn = useCallback(async () => {
     if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
@@ -32,104 +63,39 @@ export const AuthProvider = ({ children }) => {
 
       console.log('Attempting token refresh');
       setRefreshAttempts(prev => prev + 1);
-      const response = await axios.post(`${API_URL}/api/users/refresh-token`, { refreshToken }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const { token: newToken, refreshToken: newRefreshToken } = response.data;
+      const response = await axios.post(`${API_URL}/refresh-token`, { refreshToken });
+      const { token: newToken, refreshToken: newRefreshToken, user } = response.data;
+
+      if (!newToken || !newRefreshToken || !user) {
+        console.error('Invalid refresh response:', response.data);
+        return false;
+      }
 
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       localStorage.setItem('token', newToken);
       localStorage.setItem('refreshToken', newRefreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
       axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
       console.log('Token refreshed successfully');
 
-      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-      if (storedUser && storedUser.email) {
-        setCurrentUser(storedUser);
-        setUserRole(storedUser.role || 'student');
-        setIsAuthenticated(true);
-      } else {
-        const profileResponse = await axios.get(`${API_URL}/api/users/profile`, {
-          headers: { Authorization: `Bearer ${newToken}` }
-        });
-        const user = profileResponse.data.data;
-        localStorage.setItem('user', JSON.stringify(user));
         setCurrentUser(user);
         setUserRole(user.role || 'student');
         setIsAuthenticated(true);
-      }
-
       setRefreshAttempts(0); // Reset on success
       return true;
     } catch (error) {
       console.error('Failed to refresh token:', error.response?.data || error.message);
       if (error.response?.status === 401) {
         console.warn('Invalid refresh token, clearing session');
-        logout();
+        clearAuthState();
+        navigate('/login');
       }
       return false;
     }
-  }, [refreshToken, token, refreshAttempts]);
+  }, [refreshToken, refreshAttempts, MAX_REFRESH_ATTEMPTS, clearAuthState, navigate]);
 
-  const memoizedRefreshTokenFn = useMemo(() => refreshTokenFn, [refreshTokenFn]);
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (justLoggedIn) {
-        console.log('Skipping auth check due to recent login');
-        setLoading(false);
-        return;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const storedToken = localStorage.getItem('token');
-      const storedRefreshToken = localStorage.getItem('refreshToken');
-      console.log('Checking auth with tokens:', { storedToken: !!storedToken, storedRefreshToken: !!storedRefreshToken });
-
-      if (storedToken && storedRefreshToken) {
-        setToken(storedToken);
-        setRefreshToken(storedRefreshToken);
-        try {
-          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-          const response = await axios.get(`${API_URL}/api/users/profile`, {
-            headers: { Authorization: `Bearer ${storedToken}` }
-          });
-          const user = response.data.data;
-          localStorage.setItem('user', JSON.stringify(user));
-          setCurrentUser(user);
-          setUserRole(user.role || 'student');
-          setIsAuthenticated(true);
-          console.log('Auth check successful, user:', user.email);
-        } catch (error) {
-          console.error('Profile fetch failed:', error.response?.data || error.message);
-          if (error.response?.status === 500) {
-            // Handle server errors gracefully without immediate logout
-            console.warn('Server error on profile fetch, attempting token refresh');
-            const refreshed = await memoizedRefreshTokenFn();
-            if (!refreshed) {
-              console.warn('Auth refresh failed, redirecting to login');
-              navigate('/login');
-            }
-          } else {
-            const refreshed = await memoizedRefreshTokenFn();
-            if (!refreshed) {
-              console.warn('Auth refresh failed, redirecting to login');
-              navigate('/login');
-            }
-          }
-        }
-      } else {
-        console.warn('No token or refresh token, redirecting to login');
-        navigate('/login');
-      }
-      setLoading(false);
-    };
-    checkAuth();
-  }, [justLoggedIn, memoizedRefreshTokenFn, navigate]);
-
-  const login = async (user, token, refreshToken) => {
+  const login = useCallback(async (user, token, refreshToken) => {
     try {
       if (!user || typeof user !== 'object' || !user.email) {
         throw new Error('Invalid user data');
@@ -156,7 +122,7 @@ export const AuthProvider = ({ children }) => {
           async (position) => {
             const { latitude, longitude } = position.coords;
             try {
-              await axios.post(`${API_URL}/api/users/update-location`, {
+              await axios.post(`${USER_API_URL}/update-location`, {
                 coordinates: [longitude, latitude],
                 locationSharing: true
               }, {
@@ -180,12 +146,12 @@ export const AuthProvider = ({ children }) => {
       console.error('Login failed:', error.message);
       throw error;
     }
-  };
+  }, [navigate]);
 
-  const register = async (userData, role = 'student') => {
+  const register = useCallback(async (userData, role = 'student') => {
     try {
       const newUser = { ...userData, role };
-      const response = await axios.post(`${API_URL}/api/users/register`, newUser);
+      const response = await axios.post(`${API_URL}/register`, newUser);
       const { user, token, refreshToken } = response.data;
       await login(user, token, refreshToken);
       return response.data;
@@ -193,40 +159,60 @@ export const AuthProvider = ({ children }) => {
       console.error('Registration failed:', error);
       throw error;
     }
-  };
+  }, [login]);
 
-  const logout = async () => {
-    try {
-      if (isAuthenticated && token) {
-        await axios.post(`${API_URL}/api/users/logout`, {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-      }
-    } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
-      setToken(null);
-      setRefreshToken(null);
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      delete axios.defaults.headers.common['Authorization'];
-      setCurrentUser(null);
-      setUserRole(null);
-      setIsAuthenticated(false);
-      setJustLoggedIn(false);
-      setRefreshAttempts(0);
-      navigate('/login');
-    }
-  };
-
-  const hasRole = (roles) => {
+  const hasRole = useCallback((roles) => {
     if (!userRole) return false;
     if (Array.isArray(roles)) {
       return roles.includes(userRole);
     }
     return roles === userRole;
-  };
+  }, [userRole]);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (justLoggedIn) {
+        console.log('Skipping auth check due to recent login');
+        setLoading(false);
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const storedToken = localStorage.getItem('token');
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+      console.log('Checking auth with tokens:', { storedToken: !!storedToken, storedRefreshToken: !!storedRefreshToken });
+
+      if (storedToken && storedRefreshToken) {
+        setToken(storedToken);
+        setRefreshToken(storedRefreshToken);
+        try {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          const response = await axios.get(`${API_URL}/me`, {
+            headers: { Authorization: `Bearer ${storedToken}` }
+          });
+          const user = response.data.user;
+          localStorage.setItem('user', JSON.stringify(user));
+          setCurrentUser(user);
+          setUserRole(user.role || 'student');
+          setIsAuthenticated(true);
+          console.log('Auth check successful, user:', user.email);
+        } catch (error) {
+          console.error('Profile fetch failed:', error.response?.data || error.message);
+          const refreshed = await refreshTokenFn();
+          if (!refreshed) {
+            console.warn('Auth refresh failed');
+            setIsAuthenticated(false);
+          }
+        }
+      } else {
+        console.log('No token or refresh token found');
+        setIsAuthenticated(false);
+      }
+      setLoading(false);
+    };
+    checkAuth();
+  }, [justLoggedIn, refreshTokenFn]);
 
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
@@ -236,7 +222,7 @@ export const AuthProvider = ({ children }) => {
         if (error.response?.status === 401 && !originalRequest._retry && refreshAttempts < MAX_REFRESH_ATTEMPTS) {
           originalRequest._retry = true;
           setRefreshAttempts(prev => prev + 1);
-          const refreshed = await memoizedRefreshTokenFn();
+          const refreshed = await refreshTokenFn();
           if (refreshed) {
             originalRequest.headers['Authorization'] = `Bearer ${token}`;
             return axios(originalRequest);
@@ -246,9 +232,9 @@ export const AuthProvider = ({ children }) => {
       }
     );
     return () => axios.interceptors.response.eject(interceptor);
-  }, [memoizedRefreshTokenFn, token, refreshAttempts]);
+  }, [refreshTokenFn, token, refreshAttempts, MAX_REFRESH_ATTEMPTS]);
 
-  const value = {
+  const value = useMemo(() => ({
     isAuthenticated,
     currentUser,
     userRole,
@@ -258,8 +244,8 @@ export const AuthProvider = ({ children }) => {
     register,
     hasRole,
     token,
-    refreshToken: memoizedRefreshTokenFn,
-  };
+    refreshToken: refreshTokenFn,
+  }), [isAuthenticated, currentUser, userRole, loading, login, logout, register, hasRole, token, refreshTokenFn]);
 
   return (
     <AuthContext.Provider value={value}>

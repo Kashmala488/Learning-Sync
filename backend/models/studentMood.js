@@ -31,4 +31,5 @@ const studentMoodSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-module.exports = mongoose.model('StudentMood', studentMoodSchema);
+// Export model only if it hasn't been compiled yet
+module.exports = mongoose.models.StudentMood || mongoose.model('StudentMood', studentMoodSchema);
