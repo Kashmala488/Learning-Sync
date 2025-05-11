@@ -13,7 +13,7 @@ services:
       - REFRESH_TOKEN_SECRET=9a7b3c8f2e1d6a4b9c0e7f8a1d2b3c4e
       - JWT_EXPIRATION=3600000
       - REFRESH_TOKEN_EXPIRATION=604800000
-      - GOOGLE_CLIENT_ID=441572137222-ecsu4p53mv9s0t97th9rqugptj0lahlv.apps.googleusercontent.com
+      - GOOGLE_CLIENT_ID=441572137222-ecsu4p53mv9s0t97th9rqu6ptj0lahlv.apps.googleusercontent.com
       - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
       - SPRING_OUTPUT_ANSI_ENABLED=ALWAYS
       - LOGGING_LEVEL_ROOT=INFO
