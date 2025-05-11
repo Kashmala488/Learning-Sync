@@ -28,7 +28,7 @@ const Dashboard = () => {
         } else if (effectiveRole === 'teacher') {
           endpoint = '/api/teachers/dashboard';
         } else if (effectiveRole === 'admin') {
-          endpoint = '/api/admin/dashboard';
+          endpoint = '/admin/dashboard';
         }
         
         const response = await api.get(endpoint);

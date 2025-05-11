@@ -6,8 +6,6 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { faExclamationTriangle } from '@fortawesome/free-solid-svg-icons';
 import api from '../../utils/api';
-// Add axios import
-import axios from 'axios';
 
 const AdminDashboard = ({ user }) => {
   const [metrics, setMetrics] = useState(null);
@@ -15,11 +13,9 @@ const AdminDashboard = ({ user }) => {
   const [error, setError] = useState(null);
   const [alerts, setAlerts] = useState([]);
 
-  const API_URL = 'http://localhost:4000/api';
-
   const fetchMetrics = async () => {
     try {
-      const response = await axios.get(`${API_URL}/admin/reports`);
+      const response = await api.get('/admin/reports');
       setMetrics(response.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to fetch metrics');
@@ -30,7 +26,7 @@ const AdminDashboard = ({ user }) => {
 
   const fetchAlerts = async () => {
     try {
-      const response = await api.get('/api/admin/security-alerts');
+      const response = await api.get('/admin/security-alerts');
       setAlerts(response.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to fetch security alerts');
@@ -41,7 +37,7 @@ const AdminDashboard = ({ user }) => {
 
   const handleMarkAsViewed = async (alertId) => {
     try {
-      await api.put(`/api/admin/security-alerts/${alertId}/view`);
+      await api.put(`/admin/security-alerts/${alertId}/view`);
       setAlerts(alerts.map(alert => 
         alert._id === alertId 
           ? { ...alert, viewed: true, viewedAt: new Date() }

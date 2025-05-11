@@ -7,8 +7,9 @@ import StudentProfileForm from '../components/profile/StudentProfileForm';
 import TeacherProfileForm from '../components/profile/TeacherProfileForm';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import config from '../utils/config';
 
-const API_URL = 'http://localhost:4000';
+const AUTH_API_URL = config.authApiUrl;
 
 const Profile = () => {
   const { currentUser, userRole, token } = useAuth();
@@ -20,12 +21,12 @@ const Profile = () => {
     const fetchProfile = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${API_URL}/api/users/profile`, {
+        const response = await axios.get(`${AUTH_API_URL}/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         
-        if (response.data && response.data.success) {
-          setProfile(response.data.data);
+        if (response.data && response.data.user) {
+          setProfile(response.data.user);
         } else {
           setError('Failed to load profile data');
         }
@@ -44,12 +45,12 @@ const Profile = () => {
 
   const handleUpdateProfile = async (profileData) => {
     try {
-      const response = await axios.put(`${API_URL}/api/users/profile`, profileData, {
+      const response = await axios.put(`${AUTH_API_URL}/profile`, profileData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      if (response.data && response.data.success) {
-        setProfile(response.data.data);
+      if (response.data && response.data.user) {
+        setProfile(response.data.user);
         toast.success('Profile updated successfully');
       }
     } catch (err) {
@@ -60,12 +61,12 @@ const Profile = () => {
 
   const handleUpdateStudentProfile = async (studentProfileData) => {
     try {
-      const response = await axios.put(`${API_URL}/api/users/profile/student`, studentProfileData, {
+      const response = await axios.put(`${AUTH_API_URL}/profile/student`, studentProfileData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      if (response.data && response.data.success) {
-        setProfile(response.data.data);
+      if (response.data && response.data.user) {
+        setProfile(response.data.user);
         toast.success('Student profile updated successfully');
       }
     } catch (err) {
@@ -76,12 +77,12 @@ const Profile = () => {
 
   const handleUpdateTeacherProfile = async (teacherProfileData) => {
     try {
-      const response = await axios.put(`${API_URL}/api/users/profile/teacher`, teacherProfileData, {
+      const response = await axios.put(`${AUTH_API_URL}/profile/teacher`, teacherProfileData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      if (response.data && response.data.success) {
-        setProfile(response.data.data);
+      if (response.data && response.data.user) {
+        setProfile(response.data.user);
         toast.success('Teacher profile updated successfully');
       }
     } catch (err) {
@@ -92,13 +93,13 @@ const Profile = () => {
 
   const handleUpdateProfilePicture = async (pictureUrl) => {
     try {
-      const response = await axios.post(`${API_URL}/api/users/profile/picture`, 
+      const response = await axios.post(`${AUTH_API_URL}/profile/picture`, 
         { profilePicture: pictureUrl },
         { headers: { Authorization: `Bearer ${token}` }}
       );
       
-      if (response.data && response.data.success) {
-        setProfile(response.data.data);
+      if (response.data && response.data.user) {
+        setProfile(response.data.user);
         toast.success('Profile picture updated successfully');
       }
     } catch (err) {

@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext();
-const API_URL = process.env.REACT_APP_MERN_API_URL || 'http://localhost:4000';
-const MAX_REFRESH_ATTEMPTS = 5;
+
+const API_URL = 'http://localhost:4000';
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -17,51 +16,6 @@ export const AuthProvider = ({ children }) => {
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [refreshAttempts, setRefreshAttempts] = useState(0);
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const validateToken = useCallback(async (tokenToValidate) => {
-    try {
-      const response = await axios.get(`${API_URL}/api/users/profile`, {
-        headers: { Authorization: `Bearer ${tokenToValidate}` },
-      });
-      console.log('Token validation successful:', response.data.data.email);
-      return true;
-    } catch (error) {
-      console.error('Token validation failed:', error.response?.data || error.message);
-      return false;
-    }
-  }, []);
-
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const refreshPromise = useState(null)[0]; // To track ongoing refresh promise
-
-  const logout = useCallback(async () => {
-    try {
-      if (isAuthenticated && token) {
-        await axios.post(
-          `${API_URL}/api/users/logout`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
-    } catch (error) {
-      console.error('Logout failed:', error.response?.data || error.message);
-    } finally {
-      setToken(null);
-      setRefreshToken(null);
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      delete axios.defaults.headers.common['Authorization'];
-      setCurrentUser(null);
-      setUserRole(null);
-      setIsAuthenticated(false);
-      setJustLoggedIn(false);
-      setRefreshAttempts(0);
-      navigate('/login');
-      toast.info('Logged out successfully');
-    }
-  }, [isAuthenticated, token, navigate]);
 
   const refreshTokenFn = useCallback(async () => {
     if (isRefreshing) {
@@ -76,99 +30,115 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      setIsRefreshing(true);
-      const currentAttempt = refreshAttempts + 1;
-      setRefreshAttempts(currentAttempt);
-      console.log('Attempting token refresh', { attempt: currentAttempt });
-
-      refreshPromise.current = axios.post(
-        `${API_URL}/api/users/refresh-token`,
-        { refreshToken },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          validateStatus: status => status < 500,
-        }
-      );
-
-      const response = await refreshPromise.current;
-
-      if (response.status === 401) {
-        throw new Error('Invalid refresh token');
+      if (!refreshToken) {
+        console.warn('No refresh token available');
+        return false;
       }
 
+      console.log('Attempting token refresh');
+      setRefreshAttempts(prev => prev + 1);
+      const response = await axios.post(`${API_URL}/api/users/refresh-token`, { refreshToken }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       const { token: newToken, refreshToken: newRefreshToken } = response.data;
+
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       localStorage.setItem('token', newToken);
       localStorage.setItem('refreshToken', newRefreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
       axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-      setRefreshAttempts(0); // Reset attempts on success
-      console.log('Token refresh successful');
+      console.log('Token refreshed successfully');
+
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      if (storedUser && storedUser.email) {
+        setCurrentUser(storedUser);
+        setUserRole(storedUser.role || 'student');
+        setIsAuthenticated(true);
+      } else {
+        const profileResponse = await axios.get(`${API_URL}/api/users/profile`, {
+          headers: { Authorization: `Bearer ${newToken}` }
+        });
+        const user = profileResponse.data.data;
+        localStorage.setItem('user', JSON.stringify(user));
+        setCurrentUser(user);
+        setUserRole(user.role || 'student');
+        setIsAuthenticated(true);
+      }
+
+      setRefreshAttempts(0); // Reset on success
       return true;
     } catch (error) {
-      console.error('Token refresh failed:', error.message, error.response?.data);
-      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
-        console.warn('Max refresh attempts reached, logging out');
-        await logout();
+      console.error('Failed to refresh token:', error.response?.data || error.message);
+      if (error.response?.status === 401) {
+        console.warn('Invalid refresh token, clearing session');
+        logout();
       }
       return false;
     } finally {
       setIsRefreshing(false);
       refreshPromise.current = null;
     }
-  }, [refreshToken, refreshAttempts, isRefreshing, logout]);
+  }, [refreshToken, token, refreshAttempts]);
 
-  const checkAuth = useCallback(async () => {
-    if (justLoggedIn) {
-      console.log('Skipping auth check due to recent login');
-      setLoading(false);
-      return;
-    }
+  const memoizedRefreshTokenFn = useMemo(() => refreshTokenFn, [refreshTokenFn]);
 
-    const storedToken = localStorage.getItem('token');
-    const storedRefreshToken = localStorage.getItem('refreshToken');
-    if (!storedToken || !storedRefreshToken) {
-      console.warn('No token or refresh token, redirecting to login');
-      setLoading(false);
-      navigate('/login', { state: { from: location.pathname } });
-      return;
-    }
-
-    try {
-      setToken(storedToken);
-      setRefreshToken(storedRefreshToken);
-      const isValid = await validateToken(storedToken);
-      if (!isValid) {
-        throw new Error('Invalid token');
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (justLoggedIn) {
+        console.log('Skipping auth check due to recent login');
+        setLoading(false);
+        return;
       }
-      axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-      const response = await axios.get(`${API_URL}/api/users/profile`, {
-        headers: { Authorization: `Bearer ${storedToken}` },
-      });
-      const user = response.data.data;
-      localStorage.setItem('user', JSON.stringify(user));
-      setCurrentUser(user);
-      setUserRole(user.role || 'student');
-      setIsAuthenticated(true);
-      console.log('Auth check successful, user:', user.email);
-    } catch (error) {
-      console.error('Profile fetch failed:', error.response?.data || error.message);
-      if (error.response?.status === 401 || error.response?.status === 500) {
-        console.warn('Attempting token refresh due to profile fetch error');
-        const refreshed = await refreshTokenFn();
-        if (!refreshed) {
-          console.warn('Auth refresh failed, redirecting to login');
-          navigate('/login', { state: { from: location.pathname } });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const storedToken = localStorage.getItem('token');
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+      console.log('Checking auth with tokens:', { storedToken: !!storedToken, storedRefreshToken: !!storedRefreshToken });
+
+      if (storedToken && storedRefreshToken) {
+        setToken(storedToken);
+        setRefreshToken(storedRefreshToken);
+        try {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          const response = await axios.get(`${API_URL}/api/users/profile`, {
+            headers: { Authorization: `Bearer ${storedToken}` }
+          });
+          const user = response.data.data;
+          localStorage.setItem('user', JSON.stringify(user));
+          setCurrentUser(user);
+          setUserRole(user.role || 'student');
+          setIsAuthenticated(true);
+          console.log('Auth check successful, user:', user.email);
+        } catch (error) {
+          console.error('Profile fetch failed:', error.response?.data || error.message);
+          if (error.response?.status === 500) {
+            // Handle server errors gracefully without immediate logout
+            console.warn('Server error on profile fetch, attempting token refresh');
+            const refreshed = await memoizedRefreshTokenFn();
+            if (!refreshed) {
+              console.warn('Auth refresh failed, redirecting to login');
+              navigate('/login');
+            }
+          } else {
+            const refreshed = await memoizedRefreshTokenFn();
+            if (!refreshed) {
+              console.warn('Auth refresh failed, redirecting to login');
+              navigate('/login');
+            }
+          }
         }
       } else {
-        navigate('/login', { state: { from: location.pathname } });
+        console.warn('No token or refresh token, redirecting to login');
+        navigate('/login');
       }
-    } finally {
       setLoading(false);
-    }
-  }, [justLoggedIn, refreshTokenFn, navigate, location.pathname, validateToken]);
+    };
+    checkAuth();
+  }, [justLoggedIn, memoizedRefreshTokenFn, navigate]);
 
-  const login = useCallback(async (user, token, refreshToken) => {
+  const login = async (user, token, refreshToken) => {
     try {
       if (!user || typeof user !== 'object' || !user.email) {
         throw new Error('Invalid user data');
@@ -200,14 +170,12 @@ export const AuthProvider = ({ children }) => {
           async (position) => {
             const { latitude, longitude } = position.coords;
             try {
-              await axios.post(
-                `${API_URL}/api/users/update-location`,
-                {
-                  coordinates: [longitude, latitude],
-                  locationSharing: true,
-                },
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
+              await axios.post(`${API_URL}/api/users/update-location`, {
+                coordinates: [longitude, latitude],
+                locationSharing: true
+              }, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
               console.log('Location updated successfully');
             } catch (err) {
               console.warn('Failed to update location:', err);
@@ -228,12 +196,12 @@ export const AuthProvider = ({ children }) => {
       toast.error('Login failed: ' + error.message);
       throw error;
     }
-  }, [navigate, validateToken]);
+  };
 
   const register = useCallback(async (userData, role = 'student') => {
     try {
       const newUser = { ...userData, role };
-      const response = await axios.post(`${API_URL}/api/users/register`, newUser);
+      const response = await axios.post(`${API_URL}/register`, newUser);
       const { user, token, refreshToken } = response.data;
       await login(user, token, refreshToken);
       toast.success('Registration successful');
@@ -251,7 +219,7 @@ export const AuthProvider = ({ children }) => {
       return roles.includes(userRole);
     }
     return roles === userRole;
-  }, [userRole]);
+  };
 
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
@@ -265,7 +233,8 @@ export const AuthProvider = ({ children }) => {
           refreshToken
         ) {
           originalRequest._retry = true;
-          const refreshed = await refreshTokenFn();
+          setRefreshAttempts(prev => prev + 1);
+          const refreshed = await memoizedRefreshTokenFn();
           if (refreshed) {
             originalRequest.headers['Authorization'] = `Bearer ${token}`;
             return axios(originalRequest);
@@ -275,27 +244,20 @@ export const AuthProvider = ({ children }) => {
       }
     );
     return () => axios.interceptors.response.eject(interceptor);
-  }, [refreshTokenFn, token, refreshAttempts, refreshToken]);
+  }, [memoizedRefreshTokenFn, token, refreshAttempts]);
 
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
-  const value = useMemo(
-    () => ({
-      isAuthenticated,
-      currentUser,
-      userRole,
-      loading,
-      login,
-      logout,
-      register,
-      hasRole,
-      token,
-      refreshToken: refreshTokenFn,
-    }),
-    [isAuthenticated, currentUser, userRole, loading, login, logout, register, hasRole, token, refreshTokenFn]
-  );
+  const value = {
+    isAuthenticated,
+    currentUser,
+    userRole,
+    loading,
+    login,
+    logout,
+    register,
+    hasRole,
+    token,
+    refreshToken: memoizedRefreshTokenFn,
+  };
 
   return (
     <AuthContext.Provider value={value}>
