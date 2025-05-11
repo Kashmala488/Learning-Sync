@@ -17,8 +17,11 @@ export const VideoCallProvider = ({ children }) => {
     roomId: null,
     groupId: null,
     error: null,
-    loading: false
+    loading: false,
+    participants: []
   });
+
+  const API_URL = process.env.REACT_APP_VIDEO_API_URL || 'http://localhost:5000';
 
   const initializeVideoCall = useCallback(async (groupId, token) => {
     if (!groupId || !token) {
@@ -29,41 +32,54 @@ export const VideoCallProvider = ({ children }) => {
 
     try {
       const response = await axios.post(
-        'http://localhost:5000/api/video-call/create',
-        { groupId },
+        `${API_URL}/api/video-call/create`,
         { 
-          headers: { 
+          groupId,
+          userId: JSON.parse(localStorage.getItem('user'))._id,
+          dbType: 'mysql' // Specify database type
+        },
+        {
+          headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }
       );
 
-      if (!response.data || !response.data.roomName) {
+      if (!response.data?.roomId) {
         throw new Error('Invalid response from server');
       }
 
-      setCallState({
+      setCallState(prev => ({
+        ...prev,
         inCall: true,
-        roomId: response.data.roomName,
+        roomId: response.data.roomId,
         groupId,
-        error: null,
-        loading: false
-      });
+        loading: false,
+        error: null
+      }));
 
-      return response.data.roomName;
+      return response.data.roomId;
+
     } catch (err) {
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to initialize video call';
-      console.error('Error initializing video call:', errorMessage);
+      const errorMessage = err.response?.data?.message || err.message;
+      console.error('Video call initialization error:', errorMessage);
       
       setCallState(prev => ({
         ...prev,
         error: errorMessage,
         loading: false
       }));
-      
+
       throw new Error(errorMessage);
     }
+  }, [API_URL]);
+
+  const updateParticipants = useCallback((participants) => {
+    setCallState(prev => ({
+      ...prev,
+      participants
+    }));
   }, []);
 
   const endVideoCall = useCallback(() => {
@@ -72,20 +88,25 @@ export const VideoCallProvider = ({ children }) => {
       roomId: null,
       groupId: null,
       error: null,
-      loading: false
+      loading: false,
+      participants: []
     });
   }, []);
 
-  const value = React.useMemo(() => ({
-    callState,
-    initializeVideoCall,
-    endVideoCall
-  }), [callState, initializeVideoCall, endVideoCall]);
+  const value = React.useMemo(
+    () => ({
+      callState,
+      initializeVideoCall,
+      endVideoCall,
+      updateParticipants
+    }),
+    [callState, initializeVideoCall, endVideoCall, updateParticipants]
+  );
 
   return (
     <VideoCallContext.Provider value={value}>
       {children}
-    </VideoCallContext.Provider> // Corrected closing tag
+    </VideoCallContext.Provider>
   );
 };
 

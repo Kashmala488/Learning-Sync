@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -20,11 +19,12 @@ logger = logging.getLogger(__name__)
 
 # Configure CORS
 CORS(app, resources={
-    r"/api/*": {
+    r"/api/video-call/*": {
         "origins": ["http://localhost:3000"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
+        "supports_credentials": True,
+        "expose_headers": ["Access-Control-Allow-Origin"]
     }
 })
 
@@ -40,6 +40,13 @@ db.init_app(app)
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            response = jsonify({})
+            response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+            response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+            response.headers['Access-Control-Max-Age'] = '86400'
+            return response, 200
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             logger.error("Authorization header missing")
@@ -63,15 +70,6 @@ def require_auth(f):
             return jsonify({'error': f'Invalid token: {str(e)}'}), 401
         return f(*args, **kwargs)
     return decorated
-
-# Handle preflight OPTIONS requests and apply JWT middleware
-@app.before_request
-def before_request():
-    if request.method == 'OPTIONS':
-        logger.debug("Handling OPTIONS preflight request")
-        return jsonify({}), 200
-    if request.path.startswith('/api/video-call'):
-        return require_auth(lambda: None)()
 
 with app.app_context():
     db.create_all()

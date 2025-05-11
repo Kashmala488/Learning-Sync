@@ -10,9 +10,26 @@ import { faComments, faUser, faUserFriends, faQuestionCircle, faVideo } from '@f
 import { useVideoCall } from '../../contexts/VideoCallContext';
 
 const API_URL = 'http://localhost:4000';
+const VIDEO_API_URL = 'http://localhost:5000';
+
+// Video call API functions
+const createVideoCall = async (groupId, token) => {
+    return await axios.post(
+        `${VIDEO_API_URL}/api/video-call/create`,
+        { groupId },
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+};
+
+const checkCallStatus = async (groupId, token) => {
+    return await axios.get(
+        `${VIDEO_API_URL}/api/video-call/status/${groupId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+};
 
 const MyGroups = () => {
-    const { token } = useAuth();
+    const { token, currentUser } = useAuth();
     const navigate = useNavigate();
     const [myGroups, setMyGroups] = useState([]);
     const [availableGroups, setAvailableGroups] = useState([]);
@@ -20,6 +37,7 @@ const MyGroups = () => {
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('my-groups');
     const { initializeVideoCall } = useVideoCall();
+    const [callStatus, setCallStatus] = useState({});
 
     useEffect(() => {
         const fetchGroups = async () => {
@@ -30,12 +48,8 @@ const MyGroups = () => {
                 const user = userString ? JSON.parse(userString) : null;
                 const currentUserId = user?._id || user?.id;
 
-                if (!token) {
-                    throw new Error('Missing token');
-                }
-                if (!currentUserId) {
-                    throw new Error('Missing user ID');
-                }
+                if (!token) throw new Error('Missing token');
+                if (!currentUserId) throw new Error('Missing user ID');
 
                 const response = await axios.get(`${API_URL}/api/groups`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -47,6 +61,24 @@ const MyGroups = () => {
                 });
                 setAvailableGroups(availableResponse.data || []);
 
+                // Check call status for each group
+                const statusPromises = response.data.map(async (group) => {
+                    try {
+                        const statusResponse = await checkCallStatus(group._id, token);
+                        return { groupId: group._id, status: statusResponse.data };
+                    } catch (error) {
+                        console.error(`Error checking call status for group ${group._id}:`, error);
+                        return { groupId: group._id, status: { active: false } };
+                    }
+                });
+                
+                const statuses = await Promise.all(statusPromises);
+                const statusMap = statuses.reduce((acc, { groupId, status }) => {
+                    acc[groupId] = status;
+                    return acc;
+                }, {});
+                setCallStatus(statusMap);
+
                 setLoading(false);
             } catch (err) {
                 console.error('[fetchGroups] Error fetching groups:', err);
@@ -55,9 +87,7 @@ const MyGroups = () => {
             }
         };
 
-        if (token) {
-            fetchGroups();
-        }
+        if (token) fetchGroups();
     }, [token]);
 
     const handleJoinGroup = async (groupId) => {
@@ -115,29 +145,68 @@ const MyGroups = () => {
                 return;
             }
 
-            const roomId = await initializeVideoCall(group._id, token);
+            // Check if there's an active call for this group
+            const status = callStatus[group._id];
+            if (status?.active) {
+                // Join existing call
+                navigate(`/groups/${group._id}/video-call`, {
+                    state: {
+                        groupId: group._id,
+                        groupName: group.name,
+                        roomId: status.roomId,
+                    },
+                });
+                return;
+            }
 
-            // Send notifications to group members (non-blocking)
-            axios.post('http://localhost:5000/api/video-call/notify', {
-                groupId: group._id,
-                roomName: roomId
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            }).catch(err => {
-                console.error('Failed to send notifications:', err);
-                toast.warn('Video call started, but notifications could not be sent');
-            });
+            // Use existing initializeVideoCall if available, otherwise use direct API call
+            let roomId;
+            if (typeof initializeVideoCall === 'function') {
+                roomId = await initializeVideoCall(group._id, token);
+            } else {
+                const response = await createVideoCall(group._id, token);
+                roomId = response.data.roomId;
+            }
+
+            try {
+                const notifyResponse = await axios.post(
+                    `${VIDEO_API_URL}/api/video-call/notify`,
+                    {
+                        groupId: group._id,
+                        roomName: roomId,
+                    },
+                    {
+                        headers: { Authorization: `Bearer ${token}` },
+                    }
+                );
+                console.log('Notifications sent:', notifyResponse.data);
+                toast.success('Group members notified!');
+            } catch (err) {
+                console.error('Failed to send notifications:', err.response?.data || err.message);
+                toast.warn('Video call started, but some members may not be notified');
+            }
 
             navigate(`/groups/${group._id}/video-call`, {
                 state: {
                     groupId: group._id,
                     groupName: group.name,
-                    roomId: roomId
-                }
+                    roomId: roomId,
+                },
             });
         } catch (err) {
             console.error('Failed to start video call:', err);
-            toast.error('Failed to start video call. Please try again.');
+            let errorMessage = 'Failed to start video call';
+            if (err.message.includes('Network Error') || err.message.includes('ERR_CONNECTION_REFUSED')) {
+                errorMessage = 'Cannot connect to video call server. Please ensure the server is running.';
+            } else if (err.message.includes('Authentication failed')) {
+                errorMessage = 'Authentication failed. Please log in again.';
+                navigate('/login');
+            } else if (err.message.includes('not authorized')) {
+                errorMessage = 'You are not authorized to start this video call.';
+            } else if (err.message.includes('Group not found')) {
+                errorMessage = 'Group not found.';
+            }
+            toast.error(errorMessage);
         }
     };
 
@@ -246,7 +315,7 @@ const MyGroups = () => {
                                                     className="px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center"
                                                 >
                                                     <FontAwesomeIcon icon={faVideo} className="mr-1" />
-                                                    Start Video Call
+                                                    {callStatus[group._id]?.active ? 'Join Video Call' : 'Start Video Call'}
                                                 </button>
                                                 {group.mentor && (
                                                     <Link

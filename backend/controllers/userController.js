@@ -5,6 +5,18 @@ const { google } = require('googleapis');
 const mongoose = require('mongoose');
 const SecurityLog = require('../models/SecurityLog');
 
+// Helper function to generate tokens
+const generateTokens = async (user) => {
+  const payload = {
+    id: user._id,
+    email: user.email, // Added email field
+    role: user.role
+  };
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
+  const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+  return { token, refreshToken };
+};
+
 exports.login = async (req, res) => {
   try {
     const { email, password, location } = req.body;
@@ -74,8 +86,7 @@ exports.login = async (req, res) => {
       await user.save();
     }
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+    const { token, refreshToken } = await generateTokens(user);
 
     user.refreshToken = refreshToken;
     user.refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -117,8 +128,7 @@ exports.register = async (req, res) => {
     const { name, email, password, role } = req.body;
     const user = await User.create({ name, email, password, role });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+    const { token, refreshToken } = await generateTokens(user);
 
     user.refreshToken = refreshToken;
     user.refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -189,8 +199,7 @@ exports.socialLogin = async (req, res) => {
       await user.save();
     }
 
-    const accessToken = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+    const { token, refreshToken } = await generateTokens(user);
 
     user.refreshToken = refreshToken;
     user.refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -206,7 +215,7 @@ exports.socialLogin = async (req, res) => {
         profilePicture: user.profilePicture,
         location: user.location
       },
-      token: accessToken,
+      token,
       refreshToken,
       expiresIn: 15 * 60 * 1000
     });
@@ -242,8 +251,7 @@ exports.refreshToken = async (req, res) => {
     }
 
     console.log('[Refresh Token] Generating new tokens for user:', user.email);
-    const accessToken = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const newRefreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+    const { token, refreshToken: newRefreshToken } = await generateTokens(user);
 
     user.refreshToken = newRefreshToken;
     user.refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -251,7 +259,7 @@ exports.refreshToken = async (req, res) => {
 
     console.log('[Refresh Token] Tokens refreshed successfully for user:', user.email);
     res.status(200).json({
-      token: accessToken,
+      token,
       refreshToken: newRefreshToken,
       expiresIn: 15 * 60 * 1000
     });
@@ -304,8 +312,7 @@ exports.gmailAuth = async (req, res) => {
       await user.save();
     }
 
-    const accessToken = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+    const { token, refreshToken } = await generateTokens(user);
 
     user.refreshToken = refreshToken;
     user.refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -319,7 +326,7 @@ exports.gmailAuth = async (req, res) => {
         email: user.email,
         role: user.role
       },
-      token: accessToken,
+      token,
       refreshToken,
       expiresIn: 15 * 60 * 1000
     });
@@ -375,7 +382,7 @@ exports.getProfile = async (req, res) => {
     
     const user = await User.findById(userId)
       .select('-password -refreshToken -refreshTokenExpires')
-      .populate('groups', 'name description'); // Populate groups as defined in schema
+      .populate('groups', 'name description');
     
     if (!user) {
       return res.status(404).json({

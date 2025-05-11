@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Connection Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        input, button, textarea {
+            padding: 8px;
+        }
+        textarea {
+            height: 200px;
+            font-family: monospace;
+        }
+        .status {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    
+    <div class="container">
+        <div class="form-group">
+            <label for="server-url">Socket.IO Server URL:</label>
+            <input type="text" id="server-url" value="http://localhost:5001" />
+        </div>
+        
+        <div class="form-group">
+            <label for="auth-token">Authentication Token:</label>
+            <input type="text" id="auth-token" placeholder="Enter your token here" />
+        </div>
+        
+        <div class="form-group">
+            <label for="room-id">Room ID:</label>
+            <input type="text" id="room-id" placeholder="Optional room ID" />
+        </div>
+        
+        <button id="connect-btn">Connect</button>
+        <button id="disconnect-btn" disabled>Disconnect</button>
+        
+        <div class="form-group">
+            <label for="event-name">Event to emit:</label>
+            <input type="text" id="event-name" placeholder="Event name" />
+        </div>
+        
+        <div class="form-group">
+            <label for="event-data">Event data (JSON):</label>
+            <textarea id="event-data" placeholder="{}">{}</textarea>
+        </div>
+        
+        <button id="emit-btn" disabled>Emit Event</button>
+        
+        <div class="form-group">
+            <label for="log">Log:</label>
+            <textarea id="log" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const serverUrlInput = document.getElementById('server-url');
+        const authTokenInput = document.getElementById('auth-token');
+        const roomIdInput = document.getElementById('room-id');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const eventNameInput = document.getElementById('event-name');
+        const eventDataInput = document.getElementById('event-data');
+        const emitBtn = document.getElementById('emit-btn');
+        const logTextarea = document.getElementById('log');
+        
+        // Variables
+        let socket = null;
+        
+        // Functions
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString();
+            logTextarea.value += `[${timestamp}] [${type}] ${message}\n`;
+            logTextarea.scrollTop = logTextarea.scrollHeight;
+        }
+        
+        function connect() {
+            try {
+                // Get values
+                const serverUrl = serverUrlInput.value.trim();
+                const authToken = authTokenInput.value.trim();
+                const roomId = roomIdInput.value.trim();
+                
+                if (!serverUrl) {
+                    log('Server URL is required', 'error');
+                    return;
+                }
+                
+                // Prepare auth data
+                const auth = {};
+                if (authToken) auth.token = authToken;
+                if (roomId) auth.roomId = roomId;
+                
+                log(`Connecting to ${serverUrl}...`);
+                log(`Auth data: ${JSON.stringify(auth)}`);
+                
+                // Create Socket.IO connection
+                socket = io(serverUrl, {
+                    auth,
+                    reconnection: true,
+                    reconnectionAttempts: 3,
+                    reconnectionDelay: 1000,
+                    timeout: 10000
+                });
+                
+                // Register event listeners
+                socket.on('connect', () => {
+                    log('Connected successfully!', 'success');
+                    log(`Socket ID: ${socket.id}`);
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    emitBtn.disabled = false;
+                });
+                
+                socket.on('connect_error', (error) => {
+                    log(`Connection error: ${error.message}`, 'error');
+                    if (error.data) {
+                        log(`Additional error data: ${JSON.stringify(error.data)}`, 'error');
+                    }
+                });
+                
+                socket.on('disconnect', (reason) => {
+                    log(`Disconnected: ${reason}`);
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    emitBtn.disabled = true;
+                });
+                
+                socket.on('error', (error) => {
+                    log(`Error: ${error}`, 'error');
+                });
+                
+                // Listen for all events
+                socket.onAny((eventName, ...args) => {
+                    log(`Received event '${eventName}': ${JSON.stringify(args)}`);
+                });
+                
+                // Optional debug logging
+                socket.io.on('packet', (packet) => {
+                    log(`Raw packet: ${JSON.stringify(packet)}`);
+                });
+                
+            } catch (error) {
+                log(`Error creating socket: ${error.message}`, 'error');
+            }
+        }
+        
+        function disconnect() {
+            if (socket) {
+                log('Disconnecting...');
+                socket.disconnect();
+                socket = null;
+            }
+        }
+        
+        function emitEvent() {
+            if (!socket || !socket.connected) {
+                log('Socket not connected', 'error');
+                return;
+            }
+            
+            const eventName = eventNameInput.value.trim();
+            if (!eventName) {
+                log('Event name is required', 'error');
+                return;
+            }
+            
+            let eventData;
+            try {
+                eventData = JSON.parse(eventDataInput.value);
+            } catch (error) {
+                log(`Invalid JSON: ${error.message}`, 'error');
+                return;
+            }
+            
+            log(`Emitting event '${eventName}': ${JSON.stringify(eventData)}`);
+            socket.emit(eventName, eventData, (response) => {
+                log(`Received acknowledgment: ${JSON.stringify(response)}`);
+            });
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        emitBtn.addEventListener('click', emitEvent);
+        
+        // Initialize
+        log('WebSocket connection tester initialized');
+    </script>
+</body>
+</html>

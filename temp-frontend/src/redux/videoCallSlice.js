@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const VIDEO_CALL_API_URL = 'http://localhost:4000';
+const VIDEO_CALL_API_URL = process.env.REACT_APP_VIDEO_API_URL || 'http://localhost:5000';
 
 export const getVideoCallRoom = createAsyncThunk(
     'videoCall/getVideoCallRoom',
@@ -56,13 +56,13 @@ export const createVideoCall = createAsyncThunk(
 const videoCallSlice = createSlice({
     name: 'videoCall',
     initialState: {
-        roomName: null,
+        roomId: null,
         loading: false,
         error: null
     },
     reducers: {
         resetVideoCall: (state) => {
-            state.roomName = null;
+            state.roomId = null;
             state.loading = false;
             state.error = null;
         }
@@ -75,7 +75,7 @@ const videoCallSlice = createSlice({
             })
             .addCase(getVideoCallRoom.fulfilled, (state, action) => {
                 state.loading = false;
-                state.roomName = action.payload.roomName || `room-${action.payload.groupId}`;
+                state.roomId = action.payload.roomId || `room-${action.payload.groupId}`;
             })
             .addCase(getVideoCallRoom.rejected, (state, action) => {
                 state.loading = false;
@@ -87,7 +87,7 @@ const videoCallSlice = createSlice({
             })
             .addCase(createVideoCall.fulfilled, (state, action) => {
                 state.loading = false;
-                state.roomName = action.payload.roomName || `room-${action.payload.groupId}`;
+                state.roomId = action.payload.roomId || `room-${action.payload.groupId}`;
             })
             .addCase(createVideoCall.rejected, (state, action) => {
                 state.loading = false;

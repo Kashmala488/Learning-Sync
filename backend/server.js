@@ -41,6 +41,8 @@ app.use((req, res, next) => {
   next();
 });
 
+
+
 // Import route files
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
