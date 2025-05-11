@@ -4,6 +4,50 @@ const quizController = require('../controllers/quizController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
 const Group = require('../models/Group');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Quizzes
+ *   description: Quiz management and generation
+ */
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Quiz:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *           description: Quiz ID
+ *         title:
+ *           type: string
+ *           description: Quiz title
+ *         questions:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               text:
+ *                 type: string
+ *               options:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               correctAnswer:
+ *                 type: string
+ *         createdBy:
+ *           type: string
+ *           description: ID of user who created the quiz
+ *         groupId:
+ *           type: string
+ *           description: ID of the associated group
+ *         difficulty:
+ *           type: string
+ *           enum: [easy, medium, hard]
+ */
+
 // Authentication applied to all routes
 router.use(authMiddleware);
 
@@ -83,25 +127,492 @@ router.post('/generate-no-restrict/:groupId', async (req, res) => {
   }
 });
 
-// Student quiz routes
+/**
+ * @swagger
+ * /api/quizzes/student/create:
+ *   post:
+ *     summary: Create a student quiz
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - questions
+ *             properties:
+ *               title:
+ *                 type: string
+ *               questions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       201:
+ *         description: Quiz created successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/student/create', restrictTo('student'), quizController.createStudentQuiz);
+
+/**
+ * @swagger
+ * /api/quizzes/student/generate-ai/{groupId}:
+ *   post:
+ *     summary: Generate an AI quiz for a student
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: groupId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the group
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - topic
+ *             properties:
+ *               topic:
+ *                 type: string
+ *               difficulty:
+ *                 type: string
+ *                 enum: [easy, medium, hard]
+ *               numberOfQuestions:
+ *                 type: integer
+ *                 default: 5
+ *     responses:
+ *       200:
+ *         description: AI quiz generated successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/student/generate-ai/:groupId', restrictTo('student'), quizController.generateAIQuiz);
+
+/**
+ * @swagger
+ * /api/quizzes/generate/{userId}:
+ *   post:
+ *     summary: Generate a quiz for a specific user
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the user
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               topic:
+ *                 type: string
+ *               difficulty:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Quiz generated successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/generate/:userId', restrictTo('student'), quizController.generateQuiz);
+
+/**
+ * @swagger
+ * /api/quizzes/generate-from-resource:
+ *   post:
+ *     summary: Generate a quiz from a learning resource
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - resourceId
+ *             properties:
+ *               resourceId:
+ *                 type: string
+ *               numberOfQuestions:
+ *                 type: integer
+ *                 default: 5
+ *     responses:
+ *       200:
+ *         description: Quiz generated successfully from resource
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/generate-from-resource', restrictTo('student'), quizController.generateFromResource);
+
+/**
+ * @swagger
+ * /api/quizzes/group/{groupId}/quizzes:
+ *   get:
+ *     summary: Get all quizzes for a group
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: groupId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the group
+ *     responses:
+ *       200:
+ *         description: List of group quizzes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Quiz'
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/group/:groupId/quizzes', restrictTo('student'), quizController.getGroupQuizzes);
+
+/**
+ * @swagger
+ * /api/quizzes/student/results:
+ *   get:
+ *     summary: Get quiz results for a student
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of student quiz results
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/student/results', restrictTo('student'), quizController.getStudentQuizResults);
+
+/**
+ * @swagger
+ * /api/quizzes/practice/{groupId}/questions:
+ *   get:
+ *     summary: Get practice questions for a group
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: groupId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the group
+ *     responses:
+ *       200:
+ *         description: List of practice questions
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/practice/:groupId/questions', restrictTo('student'), quizController.getPracticeQuestions);
+
+/**
+ * @swagger
+ * /api/quizzes/{quizId}/submit:
+ *   post:
+ *     summary: Submit quiz answers
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - answers
+ *             properties:
+ *               answers:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     questionId:
+ *                       type: string
+ *                     answer:
+ *                       type: string
+ *     responses:
+ *       200:
+ *         description: Quiz submitted successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/:quizId/submit', restrictTo('student'), quizController.submitQuiz);
+
+/**
+ * @swagger
+ * /api/quizzes/{quizId}/feedback:
+ *   get:
+ *     summary: Get feedback for a submitted quiz
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     responses:
+ *       200:
+ *         description: Quiz feedback
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/:quizId/feedback', restrictTo('student'), quizController.getFeedback);
+
+/**
+ * @swagger
+ * /api/quizzes/{quizId}/flag:
+ *   post:
+ *     summary: Flag a question in a quiz
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - questionId
+ *               - reason
+ *             properties:
+ *               questionId:
+ *                 type: string
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Question flagged successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/:quizId/flag', restrictTo('student'), quizController.flagQuestion);
+
+/**
+ * @swagger
+ * /api/quizzes/{quizId}/hint:
+ *   post:
+ *     summary: Request a hint for a quiz question
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - questionId
+ *             properties:
+ *               questionId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Hint provided successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/:quizId/hint', restrictTo('student'), quizController.requestHint);
+
+/**
+ * @swagger
+ * /api/quizzes/{quizId}/progress:
+ *   get:
+ *     summary: Get progress indicator for a quiz
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     responses:
+ *       200:
+ *         description: Quiz progress information
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/:quizId/progress', restrictTo('student'), quizController.getProgressIndicator);
+
+/**
+ * @swagger
+ * /api/quizzes/{quizId}/time-settings:
+ *   post:
+ *     summary: Configure time settings for a quiz
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               timeLimit:
+ *                 type: integer
+ *                 description: Time limit in minutes
+ *     responses:
+ *       200:
+ *         description: Time settings configured successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/:quizId/time-settings', restrictTo('student'), quizController.configureTimeSettings);
 
-// Teacher and admin routes
+/**
+ * @swagger
+ * /api/quizzes/create:
+ *   post:
+ *     summary: Create a quiz (teacher/admin only)
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - questions
+ *             properties:
+ *               title:
+ *                 type: string
+ *               questions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *               groupId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Quiz created successfully
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/create', restrictTo('teacher', 'admin'), quizController.createQuiz);
 
-// General routes
+/**
+ * @swagger
+ * /api/quizzes/{quizId}:
+ *   get:
+ *     summary: Get quiz by ID
+ *     tags: [Quizzes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: ID of the quiz
+ *     responses:
+ *       200:
+ *         description: Quiz data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Quiz'
+ *       404:
+ *         description: Quiz not found
+ *       401:
+ *         description: Not authorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/:quizId', quizController.getQuiz);
 
 module.exports = router;

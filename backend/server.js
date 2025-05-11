@@ -2,6 +2,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
 const app = express();
 require('dotenv').config({ path: path.resolve(__dirname, 'config.env') });
 
@@ -57,7 +59,11 @@ app.use((req, res, next) => {
   next();
 });
 
-
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }'
+}));
 
 // Import route files
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
@@ -77,8 +83,21 @@ app.use((req, res, next) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Error:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *           description: Error message
+ */
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
 });
 
