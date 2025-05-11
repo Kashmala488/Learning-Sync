@@ -49,7 +49,18 @@ const userSchema = new mongoose.Schema({
     certifications: [{ type: String }],
     availability: { type: String }
   }
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  toJSON: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      // Ensure both _id and id are available
+      ret.id = ret._id;
+      return ret;
+    }
+  },
+  toObject: { virtuals: true }
+});
 
 userSchema.pre('save', async function (next) {
   if (this.isModified('password') && this.password) {
@@ -82,4 +93,5 @@ userSchema.methods.clearRefreshToken = async function () {
 // Create index for geospatial queries
 userSchema.index({ "location.coordinates": "2dsphere" });
 
-module.exports = mongoose.model('User', userSchema);
+// Ensure model is registered only once
+module.exports = mongoose.models.User || mongoose.model('User', userSchema);

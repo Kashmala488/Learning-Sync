@@ -1,0 +1,4 @@
+REACT_APP_API_URL=http://localhost:4000/api
+REACT_APP_AUTH_API_URL=http://localhost:4001/api/auth
+REACT_APP_GOOGLE_CLIENT_ID=441572137222-ecsu4p53mv9s0t97th9rqugptj0lahlv.apps.googleusercontent.com
+REACT_APP_ENABLE_HTTPS=true

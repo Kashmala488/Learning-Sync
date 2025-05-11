@@ -4,9 +4,9 @@ import axios from 'axios';
 import { GoogleLogin } from '@react-oauth/google';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import config from '../utils/config';
 
-// API base URL
-const API_URL = 'http://localhost:4000';
+const API_URL = config.authApiUrl;
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -30,212 +30,218 @@ const Register = () => {
     
     try {
       console.log('Regular register attempt:', { name, email, role });
-      await axios.post(`${process.env.REACT_APP_API_URL || API_URL}/api/users/register`, {
+      const response = await axios.post(`${API_URL}/register`, {
         name,
         email,
         password,
         role
       });
       
-      // For student users, auto-login and redirect to group selection
+      const { user, token, refreshToken } = response.data;
+      console.log('Registration successful:', { email: user.email, role: user.role });
+      
+      await login(user, token, refreshToken);
+      toast.success('Registration successful!');
+      
       if (role === 'student') {
-        try {
-          const loginResponse = await axios.post(`${process.env.REACT_APP_API_URL || API_URL}/api/users/login`, {
-            email,
-            password
-          });
-          
-          const { user, token, refreshToken } = loginResponse.data;
-          await login(user, token, refreshToken);
-          
-          toast.success('Registration successful!');
           navigate('/group-selection');
-        } catch (loginError) {
-          console.error('Auto-login error:', loginError);
-          toast.success('Registration successful! Please log in.');
-          navigate('/login');
-        }
       } else {
-        // For non-student users, just redirect to login
-      toast.success('Registration successful! Please log in.');
-      navigate('/login');
+        navigate('/dashboard');
       }
     } catch (error) {
-      console.error('Register error:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Registration failed');
+      console.error('Registration error:', error.response?.data || error.message);
+      toast.error(error.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleLoginSuccess = async (credentialResponse) => {
-    setIsLoading(true);
-    
+  const handleGoogleRegister = async (credentialResponse) => {
     try {
-      console.log('Google register attempt:', { role });
-      if (!credentialResponse.credential) {
-        toast.error('Google sign-up failed: No credential received');
-        return;
+      let location = null;
+      if (navigator.geolocation) {
+        location = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              resolve({
+                coordinates: [position.coords.longitude, position.coords.latitude],
+                locationSharing: true
+              });
+            },
+            () => resolve(null)
+          );
+        });
       }
       
-      const response = await axios.post(
-        `${process.env.REACT_APP_API_URL || API_URL}/api/users/social-login`,
-        { 
+      const response = await axios.post(`${API_URL}/social-login`, {
           credential: credentialResponse.credential,
-          role
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          withCredentials: false,
-          timeout: 10000,
-          validateStatus: status => status >= 200 && status < 500
-        }
-      );
+        role,
+        location
+      });
       
       const { user, token, refreshToken } = response.data;
+      console.log('Google registration successful:', { email: user.email, role: user.role });
+      
       await login(user, token, refreshToken);
+      toast.success('Registration with Google successful!');
       
-      toast.success('Google sign-up successful!');
-      
-      // Redirect student users to group selection
       if (role === 'student') {
         navigate('/group-selection');
       } else {
       navigate('/dashboard');
       }
     } catch (error) {
-      console.error('Google sign-up error:', error.response?.data || error.message);
-      if (error.code === 'ERR_NETWORK') {
-        toast.error('Cannot connect to server. Please check if the backend is running.');
-      } else {
-        toast.error(error.response?.data?.message || 'Google sign-up failed. Please try again.');
-      }
-    } finally {
-      setIsLoading(false);
+      console.error('Google registration error:', error.response?.data || error.message);
+      toast.error(error.response?.data?.message || 'Registration with Google failed. Please try again.');
     }
   };
 
-  const handleGoogleLoginError = () => {
-    console.error('Google sign-up failed');
-    toast.error('Google sign-up failed. Please try again.');
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Create an Account</h2>
-        
-        <form onSubmit={handleRegularRegister} className="space-y-4">
+    <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Create your account
+        </h2>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <form className="space-y-6" onSubmit={handleRegularRegister}>
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="name">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
               Full Name
             </label>
+              <div className="mt-1">
             <input
               id="name"
+                  name="name"
               type="text"
+                  autoComplete="name"
+                  required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
+              </div>
           </div>
           
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="email">
-              Email
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email address
             </label>
+              <div className="mt-1">
             <input
               id="email"
+                  name="email"
               type="email"
+                  autoComplete="email"
+                  required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
+              </div>
           </div>
           
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="password">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
               Password
             </label>
+              <div className="mt-1">
             <input
               id="password"
+                  name="password"
               type="password"
+                  autoComplete="new-password"
+                  required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
+              </div>
           </div>
           
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="confirmPassword">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
               Confirm Password
             </label>
+              <div className="mt-1">
             <input
               id="confirmPassword"
+                  name="confirmPassword"
               type="password"
+                  autoComplete="new-password"
+                  required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
+              </div>
           </div>
           
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="role">
-              Register as
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                Role
             </label>
+              <div className="mt-1">
             <select
               id="role"
+                  name="role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             >
               <option value="student">Student</option>
               <option value="teacher">Teacher</option>
-              <option value="admin">Administrator</option>
             </select>
+              </div>
           </div>
           
+            <div>
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
-            {isLoading ? 'Registering...' : 'Register'}
+                {isLoading ? 'Creating account...' : 'Create account'}
           </button>
+            </div>
         </form>
         
         <div className="mt-6">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
+                <div className="w-full border-t border-gray-300" />
             </div>
             <div className="relative flex justify-center text-sm">
               <span className="px-2 bg-white text-gray-500">Or continue with</span>
             </div>
           </div>
           
-          <div className="mt-6 flex justify-center">
+            <div className="mt-6">
+              <div className="flex justify-center">
             <GoogleLogin
-              onSuccess={handleGoogleLoginSuccess}
-              onError={handleGoogleLoginError}
-              useOneTap
-              flow="implicit"
-              auto_select={false}
-              context="signup"
-              ux_mode="popup"
-              width="280"
-            />
+                  onSuccess={handleGoogleRegister}
+                  onError={() => {
+                    console.log('Google Registration Failed');
+                    toast.error('Registration with Google failed. Please try again.');
+                  }}
+                />
+              </div>
+            </div>
           </div>
           
-          <div className="mt-4 text-center text-sm">
-            <span className="text-gray-600">Already have an account? </span>
-            <Link to="/login" className="text-blue-600 hover:underline">Login here</Link>
+          <div className="mt-6">
+            <div className="relative">
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  Already have an account?{' '}
+                  <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+                    Sign in
+                  </Link>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

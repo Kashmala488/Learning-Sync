@@ -1,36 +1,123 @@
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const User = require('../models/User');
+
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:4001/api/auth';
 
 const authMiddleware = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return res.status(401).json({ error: 'Authentication required' });
+    // Get token from header
+    const authHeader = req.header('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No token, authorization denied' });
+    }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-    if (!user) return res.status(401).json({ error: 'User not found' });
+    const token = authHeader.split(' ')[1];
 
-    req.user = user;
-    next();
+    try {
+      // Verify token with auth service
+      const response = await axios.get(`${AUTH_SERVICE_URL}/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Check if response and user data exist
+      if (!response.data || !response.data.user) {
+        return res.status(401).json({ message: 'Invalid user data from auth service' });
+      }
+
+      const authUser = response.data.user;
+
+      // Find or create user in backend database
+      let user = await User.findOne({ email: authUser.email });
+      
+      if (!user) {
+        // Create new user in backend database
+        user = new User({
+          name: authUser.name,
+          email: authUser.email,
+          role: authUser.role || 'student',
+          socialId: authUser.socialId,
+          profilePicture: authUser.profilePicture
+        });
+        await user.save();
+        console.log('Created new user in backend:', user.email);
+      }
+
+      // Update user data if needed
+      if (user.name !== authUser.name || user.role !== authUser.role) {
+        user.name = authUser.name;
+        user.role = authUser.role;
+        await user.save();
+        console.log('Updated user data in backend:', user.email);
+      }
+
+      // Set user info in request
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error('Auth service error details:', error.response?.data || error.message);
+      
+      if (error.response?.status === 401) {
+        return res.status(401).json({ message: 'Token is invalid or expired' });
+      }
+      
+      return res.status(500).json({ 
+        message: 'Auth service error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
   } catch (err) {
-    res.status(401).json({ error: 'Invalid token' });
+    console.error('Auth middleware error:', err.message);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-const restrictTo = (...roles) => {
+// Role-based middleware (new version)
+const authorize = (...roles) => {
   return (req, res, next) => {
-    console.log(`Role check for ${req.method} ${req.path} - User: ${req.user.email}, Role: ${req.user.role}, Allowed roles: [${roles.join(', ')}]`);
-    
-    if (!roles.includes(req.user.role)) {
-      console.log(`Access denied: User ${req.user.email} with role ${req.user.role} attempted to access ${req.method} ${req.path} - Required roles: [${roles.join(', ')}]`);
-      return res.status(403).json({ 
-        error: 'Access denied', 
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authorization denied' });
+    }
+
+    if (!req.user.role) {
+      console.error('User role missing in authorize middleware:', req.user);
+      return res.status(401).json({ message: 'User role not found' });
+    }
+
+    if (!roles.includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({
+        message: 'Permission denied',
         userRole: req.user.role,
         requiredRoles: roles
       });
     }
+
     next();
   };
 };
 
-module.exports = { authMiddleware, restrictTo };
+// Role-based middleware (legacy version for backward compatibility)
+const restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authorization denied' });
+    }
+
+    if (!req.user.role) {
+      console.error('User role missing in restrictTo middleware:', req.user);
+      return res.status(401).json({ message: 'User role not found' });
+    }
+
+    if (!roles.includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({
+        message: 'Permission denied',
+        userRole: req.user.role,
+        requiredRoles: roles
+      });
+    }
+
+    next();
+  };
+};
+
+module.exports = { authMiddleware, authorize, restrictTo }; 
