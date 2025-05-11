@@ -67,6 +67,7 @@ app.use('/api/teachers', require('./routes/teacherRoutes'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/students', require('./routes/studentRoutes'));
 app.use('/api/learning-paths', require('./routes/learningPathRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 // 404 handler
 app.use((req, res, next) => {
