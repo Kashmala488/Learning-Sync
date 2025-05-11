@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const groupController = require('../controllers/groupController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
+const { cacheMiddleware, clearCacheMiddleware } = require('../middleware/cacheMiddleware');
 
 /**
  * @swagger
@@ -68,7 +69,7 @@ router.use(authMiddleware);
  *       500:
  *         description: Server error
  */
-router.get('/', groupController.getAllGroups);
+router.get('/', cacheMiddleware(1800), groupController.getAllGroups);
 
 /**
  * @swagger
@@ -102,7 +103,7 @@ router.get('/', groupController.getAllGroups);
  *       500:
  *         description: Server error
  */
-router.post('/create', groupController.createGroup);
+router.post('/create', clearCacheMiddleware('cache:*:*/api/groups*'), groupController.createGroup);
 
 /**
  * @swagger
@@ -133,7 +134,7 @@ router.post('/create', groupController.createGroup);
  *       500:
  *         description: Server error
  */
-router.get('/:groupId', groupController.getGroup);
+router.get('/:groupId', cacheMiddleware(1800), groupController.getGroup);
 
 /**
  * @swagger
@@ -160,7 +161,7 @@ router.get('/:groupId', groupController.getGroup);
  *       500:
  *         description: Server error
  */
-router.post('/:groupId/join', groupController.joinGroup);
+router.post('/:groupId/join', clearCacheMiddleware('cache:*:*/api/groups*'), groupController.joinGroup);
 
 /**
  * @swagger
@@ -187,7 +188,7 @@ router.post('/:groupId/join', groupController.joinGroup);
  *       500:
  *         description: Server error
  */
-router.post('/:groupId/leave', groupController.leaveGroup);
+router.post('/:groupId/leave', clearCacheMiddleware('cache:*:*/api/groups*'), groupController.leaveGroup);
 
 /**
  * @swagger
@@ -216,7 +217,7 @@ router.post('/:groupId/leave', groupController.leaveGroup);
  *       500:
  *         description: Server error
  */
-router.delete('/:groupId', restrictTo('admin'), groupController.deleteGroup);
+router.delete('/:groupId', restrictTo('admin'), clearCacheMiddleware('cache:*:*/api/groups*'), groupController.deleteGroup);
 
 /**
  * @swagger
@@ -341,7 +342,7 @@ router.post('/:groupId/message/file', groupController.sendMessageWithFile);
  *       500:
  *         description: Server error
  */
-router.get('/:groupId/messages', groupController.getGroupMessages);
+router.get('/:groupId/messages', cacheMiddleware(300), groupController.getGroupMessages);
 
 /**
  * @swagger
@@ -367,7 +368,7 @@ router.get('/:groupId/messages', groupController.getGroupMessages);
  *       500:
  *         description: Server error
  */
-router.get('/mentor/available', restrictTo('teacher'), groupController.getGroupsWithoutMentorForTeacher);
+router.get('/mentor/available', restrictTo('teacher'), cacheMiddleware(1800), groupController.getGroupsWithoutMentorForTeacher);
 
 /**
  * @swagger
@@ -393,7 +394,7 @@ router.get('/mentor/available', restrictTo('teacher'), groupController.getGroups
  *       500:
  *         description: Server error
  */
-router.get('/mentor/my-groups', restrictTo('teacher'), groupController.getTeacherMentoredGroups);
+router.get('/mentor/my-groups', restrictTo('teacher'), cacheMiddleware(1800), groupController.getTeacherMentoredGroups);
 
 /**
  * @swagger
@@ -422,7 +423,7 @@ router.get('/mentor/my-groups', restrictTo('teacher'), groupController.getTeache
  *       500:
  *         description: Server error
  */
-router.post('/:groupId/mentor/assign', restrictTo('teacher'), groupController.assignMentor);
+router.post('/:groupId/mentor/assign', restrictTo('teacher'), clearCacheMiddleware('cache:*:*/api/groups/mentor*'), groupController.assignMentor);
 
 /**
  * @swagger
@@ -451,7 +452,7 @@ router.post('/:groupId/mentor/assign', restrictTo('teacher'), groupController.as
  *       500:
  *         description: Server error
  */
-router.post('/:groupId/mentor/unassign', restrictTo('teacher'), groupController.unassignMentor);
+router.post('/:groupId/mentor/unassign', restrictTo('teacher'), clearCacheMiddleware('cache:*:*/api/groups/mentor*'), groupController.unassignMentor);
 
 /**
  * @swagger
@@ -475,6 +476,6 @@ router.post('/:groupId/mentor/unassign', restrictTo('teacher'), groupController.
  *       500:
  *         description: Server error
  */
-router.get('/recommendations/find', groupController.findRecommendedGroups);
+router.get('/recommendations/find', cacheMiddleware(1800), groupController.findRecommendedGroups);
 
 module.exports = router;

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
+const { cacheMiddleware, clearCacheMiddleware } = require('../middleware/cacheMiddleware');
 
 /**
  * @swagger
@@ -60,7 +61,7 @@ const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
  *       500:
  *         description: Server error
  */
-router.get('/users', authMiddleware, restrictTo('admin'), adminController.getAllUsers);
+router.get('/users', authMiddleware, restrictTo('admin'), cacheMiddleware(1800), adminController.getAllUsers);
 
 /**
  * @swagger
@@ -97,7 +98,9 @@ router.get('/users', authMiddleware, restrictTo('admin'), adminController.getAll
  *       500:
  *         description: Server error
  */
-router.put('/user/role', authMiddleware, restrictTo('admin'), adminController.updateUserRole);
+router.put('/user/role', authMiddleware, restrictTo('admin'), 
+  clearCacheMiddleware('cache:*:*/api/admin/users*'), 
+  adminController.updateUserRole);
 
 /**
  * @swagger
@@ -126,7 +129,9 @@ router.put('/user/role', authMiddleware, restrictTo('admin'), adminController.up
  *       500:
  *         description: Server error
  */
-router.delete('/users/:userId', authMiddleware, restrictTo('admin'), adminController.deleteUser);
+router.delete('/users/:userId', authMiddleware, restrictTo('admin'), 
+  clearCacheMiddleware('cache:*:*/api/admin/users*'), 
+  adminController.deleteUser);
 
 /**
  * @swagger
@@ -163,7 +168,7 @@ router.delete('/users/:userId', authMiddleware, restrictTo('admin'), adminContro
  *       500:
  *         description: Server error
  */
-router.get('/moderate', authMiddleware, restrictTo('admin'), adminController.getModerationQueue);
+router.get('/moderate', authMiddleware, restrictTo('admin'), cacheMiddleware(300), adminController.getModerationQueue);
 
 /**
  * @swagger
@@ -206,7 +211,9 @@ router.get('/moderate', authMiddleware, restrictTo('admin'), adminController.get
  *       500:
  *         description: Server error
  */
-router.post('/moderate/:contentId', authMiddleware, restrictTo('admin'), adminController.moderateContent);
+router.post('/moderate/:contentId', authMiddleware, restrictTo('admin'), 
+  clearCacheMiddleware('cache:*:*/api/admin/moderate*'), 
+  adminController.moderateContent);
 
 /**
  * @swagger
@@ -237,7 +244,7 @@ router.post('/moderate/:contentId', authMiddleware, restrictTo('admin'), adminCo
  *       500:
  *         description: Server error
  */
-router.get('/reports', authMiddleware, restrictTo('admin'), adminController.generateReports);
+router.get('/reports', authMiddleware, restrictTo('admin'), cacheMiddleware(1800), adminController.generateReports);
 
 /**
  * @swagger
@@ -261,7 +268,7 @@ router.get('/reports', authMiddleware, restrictTo('admin'), adminController.gene
  *       500:
  *         description: Server error
  */
-router.get('/settings', authMiddleware, restrictTo('admin'), adminController.getSettings);
+router.get('/settings', authMiddleware, restrictTo('admin'), cacheMiddleware(3600), adminController.getSettings);
 
 /**
  * @swagger
@@ -287,7 +294,9 @@ router.get('/settings', authMiddleware, restrictTo('admin'), adminController.get
  *       500:
  *         description: Server error
  */
-router.put('/settings', authMiddleware, restrictTo('admin'), adminController.updateSettings);
+router.put('/settings', authMiddleware, restrictTo('admin'), 
+  clearCacheMiddleware('cache:*:*/api/admin/settings*'), 
+  adminController.updateSettings);
 
 /**
  * @swagger
@@ -325,7 +334,7 @@ router.put('/settings', authMiddleware, restrictTo('admin'), adminController.upd
  *       500:
  *         description: Server error
  */
-router.get('/security-alerts', authMiddleware, restrictTo('admin'), adminController.getSecurityAlerts);
+router.get('/security-alerts', authMiddleware, restrictTo('admin'), cacheMiddleware(900), adminController.getSecurityAlerts);
 
 /**
  * @swagger
@@ -354,7 +363,9 @@ router.get('/security-alerts', authMiddleware, restrictTo('admin'), adminControl
  *       500:
  *         description: Server error
  */
-router.put('/security-alerts/:alertId/view', authMiddleware, restrictTo('admin'), adminController.markAlertAsViewed);
+router.put('/security-alerts/:alertId/view', authMiddleware, restrictTo('admin'), 
+  clearCacheMiddleware('cache:*:*/api/admin/security-alerts*'), 
+  adminController.markAlertAsViewed);
 
 /**
  * @swagger
@@ -378,7 +389,7 @@ router.put('/security-alerts/:alertId/view', authMiddleware, restrictTo('admin')
  *       500:
  *         description: Server error
  */
-router.get('/analytics', authMiddleware, restrictTo('admin'), adminController.getDetailedAnalytics);
+router.get('/analytics', authMiddleware, restrictTo('admin'), cacheMiddleware(1800), adminController.getDetailedAnalytics);
 
 /**
  * @swagger
@@ -402,6 +413,6 @@ router.get('/analytics', authMiddleware, restrictTo('admin'), adminController.ge
  *       500:
  *         description: Server error
  */
-router.get('/dashboard', authMiddleware, restrictTo('admin'), adminController.generateReports);
+router.get('/dashboard', authMiddleware, restrictTo('admin'), cacheMiddleware(1800), adminController.generateReports);
 
 module.exports = router;
