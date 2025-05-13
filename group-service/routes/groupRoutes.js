@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const groupController = require('../controllers/groupController');
-const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
+const { authMiddleware, restrictTo } = require('../../backend/middleware/authMiddleware');
 
 // Apply authentication to all routes
 router.use(authMiddleware);

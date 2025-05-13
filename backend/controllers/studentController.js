@@ -1,3 +1,4 @@
+const axios = require('axios');
 const User = require('../models/User');
 const LearningPath = require('../models/LearningPath');
 const QuizResult = require('../models/QuizResult');
@@ -5,7 +6,6 @@ const Resource = require('../models/Resource');
 const StudentMood = require('../models/studentMood');
 const Message = require('../models/Message');
 const Notification = require('../models/Notification');
-const Group = require('../models/Group');
 const asyncHandler = require('express-async-handler');
 
 // Add new dashboard data function
@@ -646,8 +646,16 @@ exports.createNotifications = asyncHandler(async (req, res) => {
     }
 
     // Verify group exists (relatedId is a Group ID)
-    const group = await Group.findById(notif.relatedId);
-    if (!group) {
+    try {
+      const response = await axios.get(`http://localhost:3000/groups/${notif.relatedId}`, {
+        headers: { Authorization: req.header('Authorization') }
+      });
+      const group = response.data.group;
+      if (!group) {
+        return res.status(404).json({ error: `Group not found: ${notif.relatedId}` });
+      }
+    } catch (err) {
+      console.error(`Error fetching group ${notif.relatedId}:`, err.response?.data || err.message);
       return res.status(404).json({ error: `Group not found: ${notif.relatedId}` });
     }
 

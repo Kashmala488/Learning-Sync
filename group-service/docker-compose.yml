@@ -1,0 +1,43 @@
+version: '3.8'
+services:
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: ../Dockerfile.gateway
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth-service
+      - group-service
+      - video-call-service
+  auth-service:
+    image: auth-service:latest # Provided by your team (Java)
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongo
+      - redis
+  group-service:
+    build:
+      context: ./group-service
+      dockerfile: ../Dockerfile.group
+    ports:
+      - "3002:3002"
+    depends_on:
+      - mongo
+      - redis
+  video-call-service:
+    image: video-call-service:latest # Provided by your team (Python)
+    ports:
+      - "3003:3003"
+    depends_on:
+      - mongo
+      - redis
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"

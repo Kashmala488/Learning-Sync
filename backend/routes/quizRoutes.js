@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const quizController = require('../controllers/quizController');
 const { authMiddleware, restrictTo } = require('../middleware/authMiddleware');
-const Group = require('../models/Group');
 
 // Authentication applied to all routes
 router.use(authMiddleware);
@@ -25,7 +25,12 @@ router.get('/debug/group-membership/:groupId', async (req, res) => {
     const { groupId } = req.params;
     const userId = req.user._id;
     
-    const group = await Group.findById(groupId);
+    // Fetch group from Group Service
+    const response = await axios.get(`http://localhost:3000/groups/${groupId}`, {
+      headers: { Authorization: req.header('Authorization') }
+    });
+    const group = response.data.group;
+    
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
@@ -43,6 +48,7 @@ router.get('/debug/group-membership/:groupId', async (req, res) => {
       subject: group.subject
     });
   } catch (err) {
+    console.error('Error fetching group membership:', err.response?.data || err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -56,8 +62,12 @@ router.post('/generate-no-restrict/:groupId', async (req, res) => {
     
     console.log(`No-restrict quiz generation attempt by user ${req.user.email} (${req.user.role}) for group ${groupId}`);
 
-    // Find the group
-    const group = await Group.findById(groupId);
+    // Fetch group from Group Service
+    const response = await axios.get(`http://localhost:3000/groups/${groupId}`, {
+      headers: { Authorization: req.header('Authorization') }
+    });
+    const group = response.data.group;
+    
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
@@ -78,7 +88,7 @@ router.post('/generate-no-restrict/:groupId', async (req, res) => {
     // Call the quiz controller method with req and res
     await quizController.generateAIQuiz(req, res);
   } catch (err) {
-    console.error('Error in no-restrict route:', err);
+    console.error('Error in no-restrict route:', err.response?.data || err.message);
     res.status(500).json({ error: err.message });
   }
 });
